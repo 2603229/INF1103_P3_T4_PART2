@@ -1,0 +1,24 @@
+# Python runtime requirements: installed inside Docker and by GitHub Actions.
+# Gemini SDK for live hazard assessment; mock tests do not require API access.
+google-genai
+
+# Excel file input/output support retained from project dependencies.
+openpyxl>=3.1.0
+
+# Load the local (untracked) .env file for Gemini and storage settings.
+python-dotenv>=1.0.0
+
+# Tabular data processing used by project and supporting dependencies.
+pandas>=2.0.0
+
+# Numerical computing dependency for data/analytics code.
+numpy>=1.24.0
+
+# Support common hazard evidence image formats.
+pillow>=9.5.0
+
+# HTTP-related dependency used by application integrations.
+requests>=2.31.0
+
+# Browser-based incident management dashboard with periodic refresh.
+streamlit

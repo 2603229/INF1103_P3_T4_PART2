@@ -1,0 +1,46 @@
+# Repository hygiene: commit source/tests/diagrams, not local credentials,
+# reporter data, backups, IDE state or generated build output.
+
+# Secrets (allow the empty example template to be tracked)
+.env
+.env.*
+!.env.example
+
+# Local student/reporter records and generated exports
+hazardreportdb.json
+.incident_id_counter
+hazard_reports.csv
+hazard_reports.txt
+backups/
+sqlite_backups/
+docker_test_data/
+uploads/
+data/
+*.sqlite3
+*.sqlite3-*
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.tar
+
+# Python development, build and caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local IDE and OS configuration
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local SQLite verification database directory
+sqlite_test_data/

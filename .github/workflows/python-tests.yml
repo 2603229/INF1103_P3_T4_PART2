@@ -1,0 +1,41 @@
+
+name: INF1103 Part 2 - Basic CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  basic-checks:
+    name: Initial Project Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify required files
+        run: |
+          test -f main.py
+          test -f README.md
+          test -f requirements.txt
+          test -f .gitignore
+
+      - name: Check Python syntax
+        run: python -m py_compile main.py
+
+      - name: Confirmation
+        run: echo "Basic CI checks passed successfully!"

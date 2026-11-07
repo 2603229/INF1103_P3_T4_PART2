@@ -19,29 +19,47 @@ class AIAssessment:
     operational_impact: str
     contextual_insights: str
 
-    # Verify the model response is an object with exactly the expected five fields and legal enumerations.
-    # Strict validation prevents untrusted output from manipulating downstream decisions.
+    # Validate every assessment, including directly constructed objects.
+    # This prevents invalid AI values from bypassing from_mapping().
+    def __post_init__(self) -> None:
+        for field in AI_FIELDS:
+            value = getattr(self, field)
+
+            if not isinstance(value, str):
+                raise InvalidRecord("AI response fields must be strings")
+
+            normalized = value.strip()
+
+            if not normalized:
+                raise InvalidRecord(
+                    "AI response fields must contain nonempty text"
+                )
+
+            # Normalize fields in the frozen dataclass during initialization.
+            object.__setattr__(self, field, normalized)
+
+        if self.category not in VALID_CATEGORIES:
+            raise InvalidRecord("Invalid AI hazard category")
+
+        if self.severity not in VALID_SEVERITIES:
+            raise InvalidRecord("Invalid AI severity")
+
+        if self.operational_impact not in VALID_IMPACTS:
+            raise InvalidRecord("Invalid AI operational impact")
+
+    # Verify the model response is an object with exactly five expected fields.
+    # Field validation is handled by __post_init__().
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "AIAssessment":
         if not isinstance(value, Mapping):
             raise InvalidRecord("AI response must be a JSON object")
-        # The Gemini prompt requests exactly five string keys. Fail closed if the
-        # model adds, omits or changes any of them rather than silently accepting
-        # an output that violates the requested schema.
+
+        # Reject missing or unexpected fields.
         if set(value) != set(AI_FIELDS):
             raise InvalidRecord("AI response has missing or unexpected fields")
-        if any(not isinstance(value[key], str) for key in AI_FIELDS):
-            raise InvalidRecord("AI response fields must be strings")
-        normalized = {key: value[key].strip() for key in AI_FIELDS}
-        if any(not text for text in normalized.values()):
-            raise InvalidRecord("AI response fields must contain nonempty text")
-        if normalized["category"] not in VALID_CATEGORIES:
-            raise InvalidRecord("Invalid AI hazard category")
-        if normalized["severity"] not in VALID_SEVERITIES:
-            raise InvalidRecord("Invalid AI severity")
-        if normalized["operational_impact"] not in VALID_IMPACTS:
-            raise InvalidRecord("Invalid AI operational impact")
-        return cls(*(normalized[key] for key in AI_FIELDS))
+
+        # Creating an AIAssessment automatically calls __post_init__().
+        return cls(*(value[key] for key in AI_FIELDS))
 
     # Convert an immutable validated assessment to the Phase 1-compatible field mapping.
     def as_dict(self) -> dict[str, str]:

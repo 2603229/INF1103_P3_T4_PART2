@@ -1,5 +1,5 @@
 # FILE GUIDE: Formatted offline test runner for the AI Manager.
-# Discovers and executes AI assessment validation tests.
+# Discovers and executes AI assessment, provider, and Gemini tests.
 # Displays individual results and an overall test summary.
 # Runs without requiring a live Gemini API connection.
 
@@ -18,7 +18,8 @@ TESTS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = TESTS_DIR.parent
 
 
-# Human-readable descriptions for the seven validation tests.
+# Human-readable descriptions for AI Manager test cases.
+# Unlisted tests automatically receive formatted method names.
 TEST_LABELS = {
     "test_valid_direct_construction": "Valid assessment construction",
     "test_direct_construction_rejects_invalid_category": "Invalid category rejection",
@@ -54,14 +55,25 @@ def get_failed_test_ids(results):
 def main():
     """Execute AI Manager tests and display a formatted report."""
 
-    # ----------------------------------------------------------
-    # STEP 1: Discover AI Manager validation tests.
-    # ----------------------------------------------------------
-    suite = unittest.defaultTestLoader.discover(
-        start_dir=str(TESTS_DIR),
-        pattern="test_ai_assessment_validation.py",
-        top_level_dir=str(PROJECT_ROOT),
-    )
+
+    # Discover all four AI Manager test files.
+    suite = unittest.TestSuite()
+    loader = unittest.TestLoader()
+
+    for filename in (
+        "test_ai_assessment_validation.py",
+        "test_ai_manager.py",
+        "test_assessment_provider.py",
+        "test_gemini_assessor.py",
+    ):
+        suite.addTests(
+            loader.discover(
+                start_dir=str(TESTS_DIR),
+                pattern=filename,
+                top_level_dir=str(PROJECT_ROOT),
+            )
+        )
+
 
     tests = list(collect_tests(suite))
 
@@ -169,7 +181,12 @@ def main():
     # ----------------------------------------------------------
     # STEP 6: Display the overall result.
     # ----------------------------------------------------------
-    success = result.wasSuccessful() and result.testsRun > 0
+    success = (
+    result.wasSuccessful()
+    and result.testsRun > 0
+    and skipped_count == 0
+    and expected_failure_count == 0
+    )
 
     if success:
         print("OVERALL RESULT: ALL AI MANAGER TESTS PASSED".center(width))

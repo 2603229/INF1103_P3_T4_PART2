@@ -8,17 +8,7 @@ from campus_safety.ai_manager.gemini_assessor import GeminiAssessor
 from campus_safety.domain.hazard_report import HazardReport
 
 
-class ConstantProvider(AssessmentProvider):
-    """Concrete provider for offline interface verification."""
-
-    def assess(self, report):
-        return AIAssessment.from_mapping({
-            "risk_summary": "Loose cable",
-            "category": "Electrical",
-            "severity": "Medium",
-            "operational_impact": "Minor",
-            "contextual_insights": "Mark the area",
-        })
+from tests.ai_constant_provider import ConstantProvider
 
 
 class AssessmentProviderTests(unittest.TestCase):

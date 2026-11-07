@@ -1,6 +1,5 @@
 # FILE GUIDE: AI failure exception used for absent credentials, network issues and unusable responses.
 # The workflow catches this error and avoids persisting an unassessed report.
-# Comments explain responsibilities and design; executable statements are unchanged.
 
 """Exception raised when live AI assessment cannot be verified."""
 

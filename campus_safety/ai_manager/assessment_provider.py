@@ -1,6 +1,5 @@
 # FILE GUIDE: Abstract AI provider interface used by AIManager.
 # A concrete provider must implement assess(report); the interface itself makes no network calls.
-# Comments explain responsibilities and design; executable statements are unchanged.
 
 """Abstract AI provider interface."""
 from __future__ import annotations

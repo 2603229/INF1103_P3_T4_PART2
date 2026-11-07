@@ -1,6 +1,5 @@
 # FILE GUIDE: Concrete Gemini assessment provider: builds a privacy-aware prompt, sends an API request,
 # parses strict JSON, validates the result and retries failures without inventing a fallback assessment.
-# Comments explain responsibilities and design; executable statements are unchanged.
 
 """Gemini AI provider: live API call, prompt, JSON parsing and schema checks."""
 from __future__ import annotations

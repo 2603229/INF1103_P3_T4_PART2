@@ -1,6 +1,5 @@
 # FILE GUIDE: Validated five-field AI result value object; only expected category/severity/impact labels are accepted.
 # Reject invalid provider output before the Logic Manager uses it in routing decisions.
-# Comments explain responsibilities and design; executable statements are unchanged.
 
 """Validated AI assessment value object."""
 from __future__ import annotations

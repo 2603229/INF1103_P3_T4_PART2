@@ -3,15 +3,13 @@
 
 """AI Manager: provider-independent AI assessment service.
 
-GeminiAssessor and AssessmentUnavailable are imported for compatibility.
+Coordinates assessments through the AssessmentProvider interface.
 """
 from __future__ import annotations
 from campus_safety.ai_manager.assessment_provider import AssessmentProvider
 from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.ai_manager.ai_assessment import AIAssessment
-from campus_safety.ai_manager.gemini_assessor import GeminiAssessor
 from campus_safety.ai_manager.assessment_unavailable import AssessmentUnavailable
-
 
 # Depends on an AssessmentProvider abstraction, so test doubles can replace Gemini.
 # Its only responsibility is coordinating an AI assessment request.

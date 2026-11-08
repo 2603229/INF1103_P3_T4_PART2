@@ -16,3 +16,27 @@ class IOManager:
 
     def display_message(self, message: str) -> None:
         self._write(str(message))
+
+
+# --- Verification / Unit Test Script for Subtask 1.5 ---
+if __name__ == "__main__":
+    # Create mock storage for captured outputs
+    captured_outputs = []
+
+    def mock_write(msg: str) -> None:
+        captured_outputs.append(msg)
+
+    def mock_read(prompt: str) -> str:
+        return "mock_input"
+
+    # Initialize IOManager with injected mocks
+    manager = IOManager(read=mock_read, write=mock_write)
+
+    # Test base_dir resolution
+    assert isinstance(manager._base_dir, Path)
+    assert manager._base_dir.is_absolute()
+
+    # Test display_message
+    manager.display_message("System test message initialization successful.")
+    
+    print("Verification passed! Captured output:", captured_outputs)

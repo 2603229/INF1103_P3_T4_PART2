@@ -22,14 +22,24 @@ from typing import Any, Callable
 
 class IOManager:
     """Takes injectable input/output callables for automated UI tests."""
+
+    # Configure injectable input/output callbacks and a resolved base directory.
     def __init__(self, read: Callable[[str], str] = input,
                  write: Callable[[str], None] = print,
                  base_dir: str | Path | None = None) -> None:
+        
+        # Store the read callable (defaults to built-in input) for interactive user prompts
         self._read: Callable[[str], str] = read
+        
+        # Store the write callable (defaults to built-in print) for rendering outputs
         self._write: Callable[[str], None] = write
+        
+        # Resolve and store the base directory path (defaults to current working directory) for safe file operations
         self._base_dir = Path(base_dir or Path.cwd()).resolve()
 
+    # Print user-facing CLI text through the configured output callback.
     def display_message(self, message: str) -> None:
+        # Route all outgoing text messages through the injected write callable
         self._write(str(message))
 
 

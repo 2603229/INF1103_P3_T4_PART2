@@ -13,3 +13,6 @@ class IOManager:
         self._read: Callable[[str], str] = read
         self._write: Callable[[str], None] = write
         self._base_dir = Path(base_dir or Path.cwd()).resolve()
+
+    def display_message(self, message: str) -> None:
+        self._write(str(message))

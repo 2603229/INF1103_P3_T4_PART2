@@ -7,4 +7,7 @@ from typing import Any, Callable
 
 class IOManager:
     """Takes injectable input/output callables for automated UI tests."""
-    pass
+    def __init__(self, read: Callable[[str], str] = input,
+                 write: Callable[[str], None] = print) -> None:
+        self._read: Callable[[str], str] = read
+        self._write: Callable[[str], None] = write

@@ -88,6 +88,13 @@ class MediaHandler:
                 destination = upload_dir / f"{stem}_{number}{suffix}"
                 number += 1
 
+            # Safely copies the image using shutil.copy2, outputs success feedback, 
+            # and catches any OS or copy errors gracefully.
+            shutil.copy2(source, destination)
+            relative_path = (Path("uploads") / destination.name).as_posix()
+            self._write(f"[Success] Image attached: {relative_path}")
+            return relative_path
+        
         except (OSError, shutil.Error) as exc:
             self._write(f"[Error] Could not attach image: {exc}")
             return ""

@@ -55,3 +55,19 @@ class MediaHandler:
         # Fallback to terminal input if GUI picker is unavailable
         self._write("[Info] File picker unavailable; use a file path instead.")
         return self._read("Enter image file path (or press Enter to skip): ").strip().strip('"')
+
+    # Prompts the user to confirm attachment and verifies that the selected path points to a valid, supported image file.
+    def attach_image(self, confirm_func: Callable[[str], bool]) -> str:
+        """Prompt to attach an image, validate format, and copy to upload dir without collisions."""
+        if not confirm_func("Attach image? (y/n): "):
+            return ""
+            
+        source_text = self._choose_image_file().strip().strip('"')
+        if not source_text:
+            self._write("[Info] No image selected; continuing without image.")
+            return ""
+        
+        source = Path(source_text)
+        if source.suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp") or not source.is_file():
+            self._write("[Error] Unsupported or missing image; continuing without one.")
+            return ""

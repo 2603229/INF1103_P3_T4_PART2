@@ -27,6 +27,7 @@ class MediaHandler:
 
     def _choose_image_file(self) -> str:
         """Use Phase 1's graphical picker, or ask for a path in headless mode."""
+        # Attempt to open a GUI file dialog using tkinter
         try:
             import tkinter as tk
             from tkinter import filedialog
@@ -50,3 +51,7 @@ class MediaHandler:
                         root.destroy()
                     except (tk.TclError, OSError):
                         pass
+
+        # Fallback to terminal input if GUI picker is unavailable
+        self._write("[Info] File picker unavailable; use a file path instead.")
+        return self._read("Enter image file path (or press Enter to skip): ").strip().strip('"')

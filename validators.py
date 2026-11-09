@@ -20,3 +20,10 @@ class InputValidator:
             re.fullmatch(r"[A-Za-z0-9]+@sit\.singaporetech\.edu\.sg", contact, re.I)
             or re.fullmatch(r"[689]\d{7}", contact)
         )
+    
+    # Strip whitespace and convert the resulting string to a boolean.
+    # An empty string "" becomes False; a non-empty string becomes True.
+    @staticmethod
+    def validate_location(location: str) -> bool:
+        """Check if location string is not empty or just whitespace."""
+        return bool(location.strip())

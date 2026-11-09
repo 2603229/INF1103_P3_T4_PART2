@@ -43,6 +43,7 @@ class InputValidator:
         """Check if the asset name has at least 5 non-whitespace characters."""
         return len(asset.strip()) >= 5
 
+    # This method ensures that the hazard description meets a minimum length requirement of at least 15 meaningful characters.
     @staticmethod
     def validate_description(desc: str) -> bool:
         """Check if the hazard description has at least 15 non-whitespace characters."""

@@ -36,8 +36,9 @@ class InputValidator:
         """Check if headcount string is a whole number between 1 and 1000."""
         return value.isdigit() and 1 <= int(value) <= 1000
 
-
+    # This method checks whether a user-submitted asset name is valid by ensuring it meets a minimum length requirement of at least 5 meaningful characters.
     @staticmethod
+    # Returns True or False: It evaluates to True if the asset identifier is valid, and False if it's too short.
     def validate_asset(asset: str) -> bool:
-        """Check if the asset ID/name has at least 5 non-whitespace characters."""
+        """Check if the asset name has at least 5 non-whitespace characters."""
         return len(asset.strip()) >= 5

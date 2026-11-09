@@ -71,3 +71,14 @@ class MediaHandler:
         if source.suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp") or not source.is_file():
             self._write("[Error] Unsupported or missing image; continuing without one.")
             return ""
+
+        # Ensures the uploads directory exists and handles cases where the source file already resides there.
+        upload_dir = self._base_dir / "uploads"
+        try:
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            if source.resolve().parent == upload_dir.resolve():
+                return (Path("uploads") / source.name).as_posix()
+
+        except (OSError, shutil.Error) as exc:
+            self._write(f"[Error] Could not attach image: {exc}")
+            return ""

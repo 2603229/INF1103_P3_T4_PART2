@@ -42,3 +42,8 @@ class InputValidator:
     def validate_asset(asset: str) -> bool:
         """Check if the asset name has at least 5 non-whitespace characters."""
         return len(asset.strip()) >= 5
+
+    @staticmethod
+    def validate_description(desc: str) -> bool:
+        """Check if the hazard description has at least 15 non-whitespace characters."""
+        return len(desc.strip()) >= 15

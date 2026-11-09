@@ -79,6 +79,15 @@ class MediaHandler:
             if source.resolve().parent == upload_dir.resolve():
                 return (Path("uploads") / source.name).as_posix()
 
+            # Handle filename collisions by appending a counter
+            ## Prevents file overwrites by appending an incrementing suffix (_2, _3, etc.) if a file with the same name already exists.
+            destination = upload_dir / source.name
+            stem, suffix = source.stem, source.suffix
+            number = 2
+            while destination.exists():
+                destination = upload_dir / f"{stem}_{number}{suffix}"
+                number += 1
+
         except (OSError, shutil.Error) as exc:
             self._write(f"[Error] Could not attach image: {exc}")
             return ""

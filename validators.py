@@ -27,3 +27,11 @@ class InputValidator:
     def validate_location(location: str) -> bool:
         """Check if location string is not empty or just whitespace."""
         return bool(location.strip())
+
+    # This function ensures that a headcount string input represents a valid whole number within a logical capacity range.
+    # Check if the string contains only digits, then convert it to an integer
+    # to verify it falls strictly within the 1 to 1000 range.
+    @staticmethod
+    def validate_headcount(value: str) -> bool:
+        """Check if headcount string is a whole number between 1 and 1000."""
+        return value.isdigit() and 1 <= int(value) <= 1000

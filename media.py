@@ -24,3 +24,12 @@ class MediaHandler:
         self._read = read
         self._write = write
         self._base_dir = Path(base_dir or Path.cwd()).resolve()
+
+    def _choose_image_file(self) -> str:
+        """Use Phase 1's graphical picker, or ask for a path in headless mode."""
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+        except ImportError:
+            pass
+        

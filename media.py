@@ -32,4 +32,21 @@ class MediaHandler:
             from tkinter import filedialog
         except ImportError:
             pass
-        
+        else:
+            root = None
+            try:
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                return str(filedialog.askopenfilename(
+                    title="Select Hazard Image",
+                    filetypes=[("Supported Images", "*.png *.jpg *.jpeg *.webp")],
+                ) or "")
+            except (tk.TclError, OSError, RuntimeError):
+                pass
+            finally:
+                if root is not None:
+                    try:
+                        root.destroy()
+                    except (tk.TclError, OSError):
+                        pass

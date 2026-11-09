@@ -35,3 +35,9 @@ class InputValidator:
     def validate_headcount(value: str) -> bool:
         """Check if headcount string is a whole number between 1 and 1000."""
         return value.isdigit() and 1 <= int(value) <= 1000
+
+
+    @staticmethod
+    def validate_asset(asset: str) -> bool:
+        """Check if the asset ID/name has at least 5 non-whitespace characters."""
+        return len(asset.strip()) >= 5

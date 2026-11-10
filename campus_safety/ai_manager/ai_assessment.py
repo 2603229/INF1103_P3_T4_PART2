@@ -80,7 +80,7 @@ class AIAssessment:
             raise InvalidRecord("AI response has missing or unexpected fields")
 
         # Creating an AIAssessment automatically calls __post_init__().
-        return cls(*(value[key] for key in AI_FIELDS))
+        return cls(**{field: value[field] for field in AI_FIELDS})
 
     # Convert an immutable validated assessment to the Phase 1-compatible field mapping.
     def as_dict(self) -> dict[str, str]:

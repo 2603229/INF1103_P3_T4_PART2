@@ -64,14 +64,26 @@ class GeminiPromptBuilderTests(unittest.TestCase):
         self.assertNotIn("91234567", result)
         self.assertIn("[REDACTED EMAIL]", result)
         self.assertIn("for this hazard", result)
+    
+    def test_redacts_other_singapore_phone_numbers(self) -> None:
+        result = GeminiPromptBuilder.redact_personal_details(
+            "Contact +65 81234567 about the wet flooring",
+            self.report,
+        )
+
+        self.assertNotIn("81234567", result)
+        self.assertIn("[REDACTED PHONE]", result)
+        self.assertIn("wet flooring", result)
 
     def test_redaction_preserves_safe_hazard_text(self) -> None:
         safe_text = "Wet flooring near staircase B"
+
         self.assertEqual(
-            GeminiPromptBuilder.redact_personal_details(safe_text, self.report),
+            GeminiPromptBuilder.redact_personal_details(
+                safe_text, self.report
+            ),
             safe_text,
         )
-
 
 if __name__ == "__main__":
     unittest.main()

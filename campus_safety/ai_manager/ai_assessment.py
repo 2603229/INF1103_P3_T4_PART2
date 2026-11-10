@@ -22,6 +22,15 @@ class AIAssessment:
     # Validate every assessment, including directly constructed objects.
     # This prevents invalid AI values from bypassing from_mapping().
     def __post_init__(self) -> None:
+        """Validate and normalize all five AI assessment fields.
+
+        Ensures every field is a nonempty string and that category,
+        severity and operational impact use approved values.
+
+        Raises:
+            InvalidRecord: If any field is missing, blank, has an invalid
+                type, or contains an unsupported classification.
+        """
         for field in AI_FIELDS:
             value = getattr(self, field)
 
@@ -51,6 +60,18 @@ class AIAssessment:
     # Field validation is handled by __post_init__().
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "AIAssessment":
+        """Create a validated assessment from Gemini's JSON object.
+
+        Args:
+            value: Mapping containing exactly the five required AI fields.
+
+        Returns:
+            AIAssessment: A validated, immutable AI assessment.
+
+        Raises:
+            InvalidRecord: If the response is not a mapping, has missing
+                or extra fields, or contains invalid field values.
+        """
         if not isinstance(value, Mapping):
             raise InvalidRecord("AI response must be a JSON object")
 
@@ -63,4 +84,10 @@ class AIAssessment:
 
     # Convert an immutable validated assessment to the Phase 1-compatible field mapping.
     def as_dict(self) -> dict[str, str]:
+        """Convert the validated assessment into a dictionary.
+
+        Returns:
+            dict[str, str]: The five AI fields as key-value pairs,
+                compatible with the existing application.
+        """
         return {key: getattr(self, key) for key in AI_FIELDS}

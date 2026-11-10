@@ -1,15 +1,13 @@
-# FILE GUIDE: Storage-facing facade responsible for CRUD, audit persistence, query and export operations.
+# FILE GUIDE: Storage-facing facade responsible for CRUD, audit persistence and query operations.
 # It talks to the IncidentRepository ABC rather than branching on SQLite versus JSON.
 # Comments explain responsibilities and design; executable statements are unchanged.
 
 """Data Manager: application-facing persistence operations."""
 from __future__ import annotations
-import csv
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 from campus_safety.data_manager.incident_repository import IncidentRepository
-from campus_safety.data_manager.json_incident_repository import JsonIncidentRepository
-from campus_safety.data_manager.data_store_error import DataStoreError
+from campus_safety.data_manager.incident_exporter import IncidentExporter
 from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.domain.invalid_record import InvalidRecord
 from campus_safety.domain.schema import VALID_STATUSES
@@ -25,6 +23,7 @@ class DataManager:
     # Receive a repository instance instead of hard-coding JSON or SQLite.
     def __init__(self, repository: IncidentRepository) -> None:
         self._repository: IncidentRepository = repository  # aggregation: repository also usable independently
+        self._exporter = IncidentExporter()
 
     # Ask the configured repository to return validated report objects.
     def load(self) -> list[HazardReport]:
@@ -102,41 +101,13 @@ class DataManager:
     def restore(self, path: str | None = None) -> None:
         self._repository.restore_backup(path)
 
-    # Write all report fields with a stable union of headers as UTF-8-with-BOM CSV.
+    # Delegate file formatting and writing to the exporter.
     def export_csv(self, destination: str | Path) -> Path:
-        rows = [r.as_dict() for r in self.load()]
-        if not rows:
-            raise DataStoreError("No records to export")
-        fields = list(dict.fromkeys(key for row in rows for key in row))
-        path = Path(destination)
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("w", encoding="utf-8-sig", newline="") as stream:
-                writer = csv.DictWriter(stream, fieldnames=fields)
-                writer.writeheader()
-                writer.writerows(rows)
-            return path
-        except OSError as exc:
-            raise DataStoreError("Cannot export CSV") from exc
+        return self._exporter.export_csv(self.load(), destination)
 
-    # Produce an easy-to-read incident report; reject empty datasets consistently.
+    # Delegate text formatting and writing to the exporter.
     def export_txt(self, destination: str | Path) -> Path:
-        rows = [r.as_dict() for r in self.load()]
-        if not rows:
-            raise DataStoreError("No records to export")
-        path = Path(destination)
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("w", encoding="utf-8") as stream:
-                stream.write("CAMPUS SAFETY HAZARD REPORTING SYSTEM\nINCIDENT MANAGEMENT REPORT\n")
-                stream.write(f"Total Incidents: {len(rows)}\n\n")
-                for row in rows:
-                    stream.write("-" * 50 + "\n")
-                    for key, value in row.items():
-                        stream.write(f"{key.replace('_',' ').title()}: {value if value is not None else 'N/A'}\n")
-            return path
-        except OSError as exc:
-            raise DataStoreError("Cannot export TXT") from exc
+        return self._exporter.export_txt(self.load(), destination)
         
     # Filter incidents by location, status, category, and severity threshold.
     def search(

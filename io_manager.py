@@ -15,7 +15,10 @@ IO Manager Summary:
 # Import statements for library modules and type hinting
 from __future__ import annotations
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
+from campus_safety.models import Decision, HazardReport
+from .validators import InputValidator
+from .media import MediaHandler
 
 """IO Manager: CLI interaction and presentation, isolated from domain logic."""
 
@@ -73,6 +76,27 @@ class IOManager:
             if answer in ("n", "no"):
                 return False
             self.display_message("[Error] Enter y or n.")
+
+    # Orchestrates step-by-step terminal input for reporter details, location, headcount, 
+    # asset summary, and risk description using input validators.
+    def get_user_input(self) -> HazardReport:
+        self.display_message("\n--- Submit New Hazard Report (SIT Punggol Coast) ---")
+        
+        name = self._required("Enter reporter name (Student/Teacher): ",
+                            InputValidator.validate_name, "Enter a valid name.")
+        contact = self._required("Enter SIT email or phone number: ",
+                               InputValidator.validate_contact,
+                               "Enter a valid SIT email or 8-digit phone number.")
+        location = self._required("Enter location: ",
+                                InputValidator.validate_location, "Location cannot be empty.")
+        people_str = self._required("Estimated number of people affected (1-1000): ",
+                                    InputValidator.validate_headcount,
+                                    "Enter a whole number between 1 and 1000.")
+        people = int(people_str)
+        asset = self._required("Enter asset or brief hazard summary: ",
+                               InputValidator.validate_asset, "Minimum three characters required.")
+        desc = self._required("Describe the risk/safety hazard: ",
+                            InputValidator.validate_description, "Minimum 15 characters required.")
 
 
 # --- Verification / Unit Test Script for Subtask 1.5 ---

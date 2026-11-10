@@ -122,24 +122,27 @@ class DataManager:
         results = []
 
         for record in all_records:
+            # Convert domain object to dict for safe field inspection
+            data = record.as_dict()
+
             # Match location keyword (case-insensitive)
-            loc = record.get("location", "").lower()
+            loc = str(data.get("location", "")).lower()
             if location_query and location_query.lower() not in loc:
                 continue
 
             # Match status
-            st = record.get("status", "")
+            st = data.get("status", "")
             if status_filter and st != status_filter:
                 continue
 
             # Match category (e.g. Electrical, Infrastructure, Plumbing)
-            cat = record.get("category", "")
-            if category_filter and cat.lower() != category_filter.lower():
+            cat = str(data.get("category", "")).lower()
+            if category_filter and category_filter.lower() != cat:
                 continue
 
             # Match severity threshold
-            sev = record.get("severity", 1)
-            if sev < min_severity:
+            sev = data.get("severity", 1)
+            if isinstance(sev, (int, float)) and sev < min_severity:
                 continue
 
             results.append(record)

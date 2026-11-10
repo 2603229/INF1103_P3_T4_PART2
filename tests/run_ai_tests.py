@@ -12,10 +12,10 @@ import unittest
 from pathlib import Path
 
 
-# Locate the tests folder and project root automatically.
-# This avoids hard-coding a specific computer directory.
+# Locate the tests folder, project root and AI Manager test package.
 TESTS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = TESTS_DIR.parent
+AI_TESTS_DIR = TESTS_DIR / "ai_manager_test"
 
 
 # Human-readable descriptions for AI Manager test cases.
@@ -55,30 +55,16 @@ def get_failed_test_ids(results):
 def main():
     """Execute AI Manager tests and display a formatted report."""
 
-
-    # Discover all four AI Manager test files.
-    suite = unittest.TestSuite()
+    # ----------------------------------------------------------
+    # STEP 1: Discover AI Manager tests automatically.
+    # ----------------------------------------------------------
     loader = unittest.TestLoader()
 
-
-    # Discover all six AI Manager test files.
-    for filename in (
-        "test_ai_assessment_validation.py",
-        "test_ai_manager.py",
-        "test_assessment_provider.py",
-        "test_gemini_assessor.py",
-        "test_gemini_prompt_builder.py",
-        "test_image_evidence_processor.py",
-    ):
-
-        suite.addTests(
-            loader.discover(
-                start_dir=str(TESTS_DIR),
-                pattern=filename,
-                top_level_dir=str(PROJECT_ROOT),
-            )
-        )
-
+    suite = loader.discover(
+        start_dir=str(AI_TESTS_DIR),
+        pattern="test_*.py",
+        top_level_dir=str(PROJECT_ROOT),
+    )
 
     tests = list(collect_tests(suite))
 
@@ -187,10 +173,10 @@ def main():
     # STEP 6: Display the overall result.
     # ----------------------------------------------------------
     success = (
-    result.wasSuccessful()
-    and result.testsRun > 0
-    and skipped_count == 0
-    and expected_failure_count == 0
+        result.wasSuccessful()
+        and result.testsRun > 0
+        and skipped_count == 0
+        and expected_failure_count == 0
     )
 
     if success:

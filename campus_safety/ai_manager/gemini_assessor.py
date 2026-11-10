@@ -16,6 +16,8 @@ from campus_safety.ai_manager.ai_assessment import AIAssessment
 from campus_safety.ai_manager.assessment_provider import AssessmentProvider
 from campus_safety.ai_manager.assessment_unavailable import AssessmentUnavailable
 from campus_safety.ai_manager.gemini_prompt_builder import GeminiPromptBuilder
+
+# Re-export image constants so older tests/imports remain compatible.
 from campus_safety.ai_manager.image_evidence_processor import (
     IMAGE_FORMATS as IMAGE_FORMATS,
     MAX_IMAGE_BYTES as MAX_IMAGE_BYTES,
@@ -29,10 +31,6 @@ if TYPE_CHECKING:
     from google.genai.types import Part
 
 log = logging.getLogger(__name__)
-
-# Re-export image constants so older tests/imports remain compatible.
-
-
 class GeminiAssessor(AssessmentProvider):
     """Obtain verified, five-field assessments from the live Gemini API.
 

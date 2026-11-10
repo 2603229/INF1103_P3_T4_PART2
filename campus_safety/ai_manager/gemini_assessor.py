@@ -45,6 +45,13 @@ class GeminiAssessor(AssessmentProvider):
     def __init__(self, api_key: str | None = None,
                  models: tuple[str, ...] | None = None,
                  max_attempts: int = 2) -> None:
+        """Initialize the Gemini assessment provider.
+
+        Args:
+            api_key: Gemini API key. Defaults to the environment variable.
+            models: Model names to try in order. Defaults to configured models.
+            max_attempts: Maximum attempts per model, with a minimum of one.
+        """
         self._api_key = api_key if api_key is not None else os.getenv("GEMINI_API_KEY", "")
         self._models = models or tuple(x.strip() for x in
                             os.getenv("GEMINI_MODELS", "gemini-3.8-flash,gemini-3.6-flash").split(",") if x.strip())

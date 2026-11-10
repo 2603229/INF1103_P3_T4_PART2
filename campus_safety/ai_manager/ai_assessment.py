@@ -28,8 +28,8 @@ class AIAssessment:
         severity and operational impact use approved values.
 
         Raises:
-            InvalidRecord: If any field is missing, blank, has an invalid
-                type, or contains an unsupported classification.
+            InvalidRecord: If any field has an invalid type,
+                contains blank text, or uses an unsupported classification.
         """
         for field in AI_FIELDS:
             value = getattr(self, field)

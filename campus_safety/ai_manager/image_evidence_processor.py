@@ -24,9 +24,15 @@ IMAGE_FORMATS = {
     ".webp": ("WEBP", "image/webp"),
 }
 
-
 class ImageEvidenceProcessor:
-    """Validate image evidence before creating a Gemini SDK image part."""
+    """Validate and prepare image evidence for Gemini API requests.
+
+    Ensures uploaded images meet supported format, size, resolution,
+    and integrity requirements before conversion to Gemini SDK parts.
+
+    Keeps image validation separate from GeminiAssessor to support
+    the Single Responsibility Principle and independent testing.
+    """
 
     @staticmethod
     def image_part(path: str) -> Part:

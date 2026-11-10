@@ -6,6 +6,7 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 import tempfile
+import base64
 from pathlib import Path
 
 from campus_safety.ai_manager.ai_assessment import AIAssessment
@@ -204,6 +205,110 @@ class GeminiAssessorTests(unittest.TestCase):
 
             # The API must not receive the unsupported file.
             client.models.generate_content.assert_not_called()
+
+    def test_primary_model_fails_fallback_succeeds(self):
+        """Use the fallback model when the primary model fails."""
+
+        # Simulate two primary-model failures,
+        # followed by a successful fallback-model response.
+        modules, client = fake_sdk([
+            TimeoutError("primary model attempt 1 failed"),
+            TimeoutError("primary model attempt 2 failed"),
+            types.SimpleNamespace(text=json.dumps(GOOD)),
+        ])
+
+        # Replace the real Gemini SDK and disable retry delays.
+        with patch.dict(sys.modules, modules), patch(
+            "campus_safety.ai_manager.gemini_assessor.time.sleep"
+        ) as sleep:
+
+            result = GeminiAssessor(
+                api_key="fake-test-key",
+                models=("primary-model", "fallback-model"),
+                max_attempts=2,
+            ).assess(self.report)
+
+        # The fallback model must return a validated assessment.
+        self.assertIsInstance(result, AIAssessment)
+        self.assertEqual(result.as_dict(), GOOD)
+
+        # Two failed calls + one successful call = three requests.
+        self.assertEqual(
+            client.models.generate_content.call_count, 3
+        )
+
+        # Verify the exact order in which models were attempted.
+        model_calls = [
+            call.kwargs["model"]
+            for call in client.models.generate_content.call_args_list
+        ]
+
+        self.assertEqual(
+            model_calls,
+            ["primary-model", "primary-model", "fallback-model"],
+        )
+
+        # Only one retry delay should occur.
+        sleep.assert_called_once()
+
+
+    def test_valid_image_is_included_in_request(self):
+        """Verify Gemini receives the hazard prompt and valid PNG evidence."""
+
+        # Create a small PNG without requiring extra libraries.
+        png_bytes = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1Pe"
+            "AAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
+        )
+
+        # Temporary files are automatically removed after the test.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "evidence.png"
+            image_path.write_bytes(png_bytes)
+
+            # Attach the image to the hazard report.
+            self.report.set_runtime_image_path(str(image_path))
+
+            # Simulate a successful Gemini response.
+            modules, client = fake_sdk([
+                types.SimpleNamespace(text=json.dumps(GOOD)),
+            ])
+
+            # Simulate converting image bytes to a Gemini image part.
+            fake_types = modules["google.genai.types"]
+            fake_types.Part = MagicMock()
+
+            image_part = object()
+            fake_types.Part.from_bytes.return_value = image_part
+
+            # Run the assessment without calling the real Gemini API.
+            with patch.dict(sys.modules, modules):
+                result = GeminiAssessor(
+                    api_key="fake-test-key",
+                    models=("mock",),
+                ).assess(self.report)
+
+            # Check that the correct image bytes and type are used.
+            fake_types.Part.from_bytes.assert_called_once_with(
+                data=png_bytes,
+                mime_type="image/png",
+            )
+
+            # Verify Gemini receives exactly one request.
+            client.models.generate_content.assert_called_once()
+
+            # Check that the request contains both text and image.
+            contents = (
+                client.models.generate_content
+                .call_args.kwargs["contents"]
+            )
+
+            self.assertEqual(len(contents), 2)
+            self.assertIn("Campus Block A", contents[0])
+            self.assertIs(contents[1], image_part)
+
+            # Verify that the returned assessment is valid.
+            self.assertEqual(result.as_dict(), GOOD)
 
 
 if __name__ == "__main__":

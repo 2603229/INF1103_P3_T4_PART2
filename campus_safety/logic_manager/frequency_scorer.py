@@ -1,6 +1,6 @@
 from typing import Any
 
-from scorer import Scorer
+from .scorer import Scorer
 
 
 class FrequencyScorer(Scorer):

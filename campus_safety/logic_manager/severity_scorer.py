@@ -1,4 +1,4 @@
-from table_scorer import TableScorer
+from .table_scorer import TableScorer
 
 
 class SeverityScorer(TableScorer):

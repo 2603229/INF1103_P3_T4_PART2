@@ -5,9 +5,9 @@
 from __future__ import annotations
 import json
 import logging
-import mimetypes
 import os
 from pathlib import Path
+from io import BytesIO
 from typing import TYPE_CHECKING
 import time
 
@@ -20,6 +20,18 @@ from campus_safety.domain.invalid_record import InvalidRecord
 from campus_safety.ai_manager.assessment_unavailable import AssessmentUnavailable
 
 log = logging.getLogger(__name__)
+
+
+# Image evidence limits and supported formats.
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # Maximum 10 MiB.
+MAX_IMAGE_PIXELS = 50_000_000  # Maximum 50 million pixels.
+
+IMAGE_FORMATS = {
+    ".jpg": ("JPEG", "image/jpeg"),
+    ".jpeg": ("JPEG", "image/jpeg"),
+    ".png": ("PNG", "image/png"),
+    ".webp": ("WEBP", "image/webp"),
+}
 
 
 # Live Google Gemini adapter implementing AssessmentProvider.
@@ -40,6 +52,18 @@ class GeminiAssessor(AssessmentProvider):
     # Send hazard details and allowed JSON schema to Gemini, deliberately excluding reporter identity.
     @staticmethod
     def build_prompt(report: HazardReport) -> str:
+        """Build Gemini's five-field JSON prompt from a hazard report.
+
+        Args:
+            report: Validated campus hazard information.
+
+        Returns:
+            str: A structured prompt containing the location, headcount,
+                asset information and hazard description.
+
+        Privacy:
+            The reporter's name and contact details are excluded.
+        """
         # Reporter identity is intentionally excluded, as in Phase 1.
         return ("Analyze this campus safety hazard. Respond with ONLY a JSON object "
                 "containing exactly these five string keys: risk_summary, category, "
@@ -56,6 +80,18 @@ class GeminiAssessor(AssessmentProvider):
     # Raise InvalidRecord rather than guessing at missing or malformed model fields.
     @staticmethod
     def parse_response(raw: str) -> AIAssessment:
+        """Parse Gemini's JSON response into a validated AI assessment.
+
+        Args:
+            raw: Gemini response text, optionally wrapped in Markdown fences.
+
+        Returns:
+            AIAssessment: Validated assessment containing five required fields.
+
+        Raises:
+            InvalidRecord: If the response is empty, contains malformed JSON,
+                or does not satisfy the required assessment schema.
+        """
         if not isinstance(raw, str) or not raw.strip():
             raise InvalidRecord("Empty AI response")
         cleaned = raw.strip()
@@ -69,19 +105,110 @@ class GeminiAssessor(AssessmentProvider):
         return AIAssessment.from_mapping(payload)
 
     # Validate a local image and encode it as an SDK part; import the SDK only when required.
+
     @staticmethod
     def _image_part(path: str) -> Part:
-        """Import the SDK lazily so tests run without Google packages/network."""
-        from google.genai import types
+        """Validate image evidence and convert it into a Gemini image part.
+
+        Checks that the image exists, has a supported file extension,
+        does not exceed the size or resolution limits, and contains
+        valid image data matching its extension.
+
+        Args:
+            path: Local file path of the image evidence.
+
+        Returns:
+            Part: Validated image bytes with the correct MIME type.
+
+        Raises:
+            AssessmentUnavailable: If the image is missing, unsupported,
+                oversized, corrupted, or cannot be read.
+        """
+        # Import dependencies only when image evidence is provided.
+        try:
+            from google.genai import types
+            from PIL import Image
+        except ImportError as exc:
+            raise AssessmentUnavailable(
+                "Install google-genai and Pillow to use image evidence"
+            ) from exc
+
         image = Path(path)
-        if not image.is_file() or image.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
-            raise AssessmentUnavailable("Image evidence unavailable or unsupported")
-        mime = mimetypes.guess_type(str(image))[0]
-        return types.Part.from_bytes(data=image.read_bytes(), mime_type=mime)
+        expected = IMAGE_FORMATS.get(image.suffix.lower())
+
+        # Step 1: Check file existence and supported extension.
+        if not image.is_file() or expected is None:
+            raise AssessmentUnavailable(
+                "Image evidence unavailable or unsupported"
+            )
+
+        expected_format, mime = expected
+
+        try:
+            # Step 2: Check size before reading image into memory.
+            byte_count = image.stat().st_size
+
+            if not 0 < byte_count <= MAX_IMAGE_BYTES:
+                raise AssessmentUnavailable(
+                    "Image evidence is empty or exceeds the 10 MiB size limit"
+                )
+
+            data = image.read_bytes()
+
+            if len(data) > MAX_IMAGE_BYTES:
+                raise AssessmentUnavailable(
+                    "Image evidence exceeds the 10 MiB size limit"
+                )
+
+            # Step 3: Verify the actual format, not just the filename.
+            with Image.open(BytesIO(data)) as candidate:
+                if candidate.format != expected_format:
+                    raise AssessmentUnavailable(
+                        "Image evidence format does not match the file extension"
+                    )
+
+                # Step 4: Reject images with excessive resolution.
+                if candidate.width * candidate.height > MAX_IMAGE_PIXELS:
+                    raise AssessmentUnavailable(
+                        "Image evidence resolution is too large"
+                    )
+
+                # Step 5: Verify image file integrity.
+                candidate.verify()
+
+            # Step 6: Confirm image data can be decoded.
+            with Image.open(BytesIO(data)) as candidate:
+                candidate.load()
+
+        except (OSError, ValueError, Image.DecompressionBombError) as exc:
+            raise AssessmentUnavailable(
+                "Image evidence is invalid or unreadable"
+            ) from exc
+
+        # Step 7: Create the Gemini image part after validation.
+        return types.Part.from_bytes(
+            data=data,
+            mime_type=mime,
+        )
+
 
     # Call the real Gemini API with strict JSON output and optional image evidence.
     # Try configured models/retries; every unsuccessful path raises AssessmentUnavailable (no fake success).
     def assess(self, report: HazardReport) -> AIAssessment:
+        """Request a Gemini assessment with retries and model fallback.
+
+        Args:
+            report: Validated hazard report with optional image evidence.
+
+        Returns:
+            AIAssessment: A validated AI result containing five fields.
+
+        Raises:
+            AssessmentUnavailable: If credentials are missing, image evidence
+                is invalid, or all API attempts fail.
+
+        The method never generates a fake assessment on failure.
+        """
         if not self._api_key:
             raise AssessmentUnavailable("GEMINI_API_KEY is not configured")
         try:

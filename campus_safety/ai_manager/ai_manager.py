@@ -45,8 +45,10 @@ class AIManager:
             AIAssessment: The validated assessment returned by the provider.
 
         Raises:
-            AssessmentUnavailable: If the provider fails or returns
-                an object that is not an AIAssessment.
+            AssessmentUnavailable: If the provider returns an object
+                that is not an AIAssessment.
+
+            Exceptions raised by the provider are propagated to the caller.
 
         Invalid provider results must not reach the Logic Manager
         for scoring or the Data Manager for persistence.

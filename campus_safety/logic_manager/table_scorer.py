@@ -4,6 +4,11 @@ from .scorer import Scorer
 
 
 class TableScorer(Scorer):
+    """
+    ABSTRACT BASE CLASS for scorers that map a text field to points via a
+    lookup table.
+    """
+
     _FIELD: str = ""
     _DEFAULT: str = ""
     _POINTS: dict[str, int] = {}

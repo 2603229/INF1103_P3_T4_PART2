@@ -380,5 +380,69 @@ class GeminiAssessorTests(unittest.TestCase):
             # Verify no Gemini API request was made.
             client.models.generate_content.assert_not_called()
 
+    
+    def test_mismatched_image_format_is_rejected(self):
+        """Reject a JPEG image disguised with a PNG extension."""
+
+        from PIL import Image
+
+        # Create a temporary file named as a PNG.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "wrong_extension.png"
+
+            # The actual file contents are JPEG, not PNG.
+            Image.new("RGB", (2, 2), "white").save(
+                file_path,
+                format="JPEG",
+            )
+
+            # Attach the image to the hazard report.
+            self.report.set_runtime_image_path(str(file_path))
+
+            # Simulate Gemini without making a live API call.
+            modules, client = fake_sdk([])
+
+            with patch.dict(sys.modules, modules):
+                with self.assertRaisesRegex(
+                    AssessmentUnavailable,
+                    "format",
+                ):
+                    GeminiAssessor(
+                        api_key="fake-test-key",
+                        models=("mock",),
+                    ).assess(self.report)
+
+            # The invalid image must never reach Gemini.
+            client.models.generate_content.assert_not_called()
+
+
+    def test_prompt_redacts_personal_details_in_free_text(self):
+        """Ensure personal details in descriptions are not sent to Gemini."""
+
+        report = HazardReport({
+            "reporter_name": "Private Reporter",
+            "reporter_contact": "private@example.com",
+            "location": "Campus Block A",
+            "impact_headcount": 3,
+            "asset_info": "Electrical outlet checked by Private Reporter",
+            "description": (
+                "Water leaking near the outlet. "
+                "Contact PRIVATE@example.com or 91234567 for details."
+            ),
+        })
+
+        prompt = GeminiAssessor.build_prompt(report)
+
+        # Hazard information must remain available.
+        self.assertIn("Water leaking near the outlet", prompt)
+
+        # Personal information must be masked.
+        self.assertNotIn("Private Reporter", prompt)
+        self.assertNotIn("private@example.com", prompt.lower())
+        self.assertNotIn("91234567", prompt)
+
+        # Confirm some information was redacted.
+        self.assertIn("[REDACTED", prompt)
+
 if __name__ == "__main__":
     unittest.main()

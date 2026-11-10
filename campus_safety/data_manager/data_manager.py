@@ -6,7 +6,7 @@
 from __future__ import annotations
 import csv
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable, Dict, List
 from campus_safety.data_manager.incident_repository import IncidentRepository
 from campus_safety.data_manager.json_incident_repository import JsonIncidentRepository
 from campus_safety.data_manager.data_store_error import DataStoreError
@@ -137,3 +137,40 @@ class DataManager:
             return path
         except OSError as exc:
             raise DataStoreError("Cannot export TXT") from exc
+        
+    # Filter incidents by location, status, category, and severity threshold.
+    def search(
+        self,
+        location_query: str = "",
+        status_filter: str = "",
+        category_filter: str = "",
+        min_severity: int = 1
+    ) -> List[Dict[str, Any]]:
+        """Filters stored records based on facilities-specific criteria."""
+        all_records = self.load()
+        results = []
+
+        for record in all_records:
+            # Match location keyword (case-insensitive)
+            loc = record.get("location", "").lower()
+            if location_query and location_query.lower() not in loc:
+                continue
+
+            # Match status
+            st = record.get("status", "")
+            if status_filter and st != status_filter:
+                continue
+
+            # Match category (e.g. Electrical, Infrastructure, Plumbing)
+            cat = record.get("category", "")
+            if category_filter and cat.lower() != category_filter.lower():
+                continue
+
+            # Match severity threshold
+            sev = record.get("severity", 1)
+            if sev < min_severity:
+                continue
+
+            results.append(record)
+
+        return results

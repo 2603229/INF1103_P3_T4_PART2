@@ -2,7 +2,7 @@ from table_scorer import TableScorer
 
 
 class SeverityScorer(TableScorer):
-    """Points for the AI-supplied severity."""
+    """Points for the AI-generated severity."""
 
     _FIELD = "severity"
     _DEFAULT = "Low"

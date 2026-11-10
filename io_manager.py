@@ -42,6 +42,22 @@ class IOManager:
         # Route all outgoing text messages through the injected write callable
         self._write(str(message))
 
+    # Main Menu Interface
+    def menu(self) -> str:
+        self.display_message("\n==============================================\n"
+                             " CAMPUS SAFETY HAZARD REPORTING SYSTEM\n"
+                             "==============================================\n"
+                             "1. Submit New Hazard Report\n"
+                             "2. View All Logged Incidents\n"
+                             "3. View Top 5 Most Frequent Hazards\n"
+                             "4. Exit")
+        while True:
+            choice = self._read("Select an option (1-4): ").strip()
+            if choice in ("1", "2", "3", "4"):
+                return choice
+            self.display_message("[Error] Enter a number between 1 and 4.")
+
+
 
 # --- Verification / Unit Test Script for Subtask 1.5 ---
 if __name__ == "__main__":

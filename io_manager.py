@@ -57,6 +57,22 @@ class IOManager:
                 return choice
             self.display_message("[Error] Enter a number between 1 and 4.")
 
+    # Creates helper methods (_required and confirm) to safely loop through user prompts until valid text or affirmative/negative choices are given.
+    def _required(self, prompt: str, check: Callable[[str], bool], error: str) -> str:
+        while True:
+            value = self._read(prompt).strip()
+            if check(value):
+                return value
+            self.display_message("[Error] " + error)
+
+    def confirm(self, prompt: str = "Confirm hazard report submission? (y/n): ") -> bool:
+        while True:
+            answer = self._read(prompt).strip().lower()
+            if answer in ("y", "yes"):
+                return True
+            if answer in ("n", "no"):
+                return False
+            self.display_message("[Error] Enter y or n.")
 
 
 # --- Verification / Unit Test Script for Subtask 1.5 ---

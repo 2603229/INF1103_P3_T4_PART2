@@ -10,6 +10,7 @@ from pathlib import Path
 from io import BytesIO
 from typing import TYPE_CHECKING
 import time
+import re
 
 if TYPE_CHECKING:
     from google.genai.types import Part
@@ -49,6 +50,43 @@ class GeminiAssessor(AssessmentProvider):
                             os.getenv("GEMINI_MODELS", "gemini-3.8-flash,gemini-3.6-flash").split(",") if x.strip())
         self._max_attempts = max(1, max_attempts)
 
+    @staticmethod
+    def _redact_personal_details(
+        value: object,
+        report: HazardReport,
+    ) -> str:
+        """Mask reporter identity, emails and common SG phone numbers."""
+
+        text = str(value or "")
+
+        # Remove the reporter's name and contact if repeated in free text.
+        for field in ("reporter_name", "reporter_contact"):
+            identifier = str(report.get(field) or "").strip()
+
+            if identifier:
+                text = re.sub(
+                    rf"(?<!\w){re.escape(identifier)}(?!\w)",
+                    "[REDACTED]",
+                    text,
+                    flags=re.IGNORECASE,
+                )
+
+        # Mask email addresses.
+        text = re.sub(
+            r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+            "[REDACTED EMAIL]",
+            text,
+        )
+
+        # Mask common Singapore phone-number formats.
+        text = re.sub(
+            r"(?<!\d)(?:\+65[\s-]?)?[689]\d{7}(?!\d)",
+            "[REDACTED PHONE]",
+            text,
+        )
+
+        return text
+
     # Send hazard details and allowed JSON schema to Gemini, deliberately excluding reporter identity.
     @staticmethod
     def build_prompt(report: HazardReport) -> str:
@@ -64,6 +102,17 @@ class GeminiAssessor(AssessmentProvider):
         Privacy:
             The reporter's name and contact details are excluded.
         """
+
+        # Mask recognizable personal details in free-text fields.
+        location = GeminiAssessor._redact_personal_details(
+            report.location, report
+        )
+        asset_info = GeminiAssessor._redact_personal_details(
+            report.asset_info, report
+        )
+        description = GeminiAssessor._redact_personal_details(
+            report.get("description"), report
+        )
         # Reporter identity is intentionally excluded, as in Phase 1.
         return ("Analyze this campus safety hazard. Respond with ONLY a JSON object "
                 "containing exactly these five string keys: risk_summary, category, "
@@ -71,10 +120,10 @@ class GeminiAssessor(AssessmentProvider):
                 "category: Electrical, Plumbing, Structural, HVAC, IT/Equipment; "
                 "severity: Low, Medium, High, Critical; operational_impact: "
                 "Minor, Moderate, Severe, Catastrophic.\n"
-                f"Location: {report.location}\n"
+                f"Location: {location}\n"
                 f"Impact Headcount: {report.get('impact_headcount')}\n"
-                f"Asset Information: {report.asset_info}\n"
-                f"Description: {report.get('description')}")
+                f"Asset Information: {asset_info}\n"
+                f"Description: {description}")
 
     # Strip optional Markdown fences, decode JSON and enforce the five-field schema.
     # Raise InvalidRecord rather than guessing at missing or malformed model fields.
@@ -97,7 +146,9 @@ class GeminiAssessor(AssessmentProvider):
         cleaned = raw.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[-1]
-            if cleaned.endswith("```"): cleaned = cleaned[:-3]
+
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
         try:
             payload = json.loads(cleaned.strip())
         except (TypeError, json.JSONDecodeError) as exc:

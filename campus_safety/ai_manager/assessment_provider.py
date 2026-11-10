@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from campus_safety.ai_manager.ai_assessment import AIAssessment
 from campus_safety.domain.hazard_report import HazardReport
 
-
 # Defines a shared contract for interchangeable AI providers.
 # This supports dependency injection, polymorphism and offline testing.
 class AssessmentProvider(ABC):

@@ -1,4 +1,8 @@
-"""Offline tests for Gemini prompt, strict JSON parsing, and retries."""
+# FILE GUIDE: Offline unit tests for the GeminiAssessor API adapter.
+# Verify JSON parsing, provider failures, retries, model fallback,
+# prompt privacy and image evidence using a mocked Gemini SDK.
+
+"""Offline tests for Gemini assessment requests and response validation."""
 
 import json
 import sys
@@ -54,7 +58,15 @@ def fake_sdk(responses):
 
 
 class GeminiAssessorTests(unittest.TestCase):
+    """Verify GeminiAssessor behaviour without external API requests.
+
+    Tests successful assessments, strict JSON validation, retry
+    behaviour, fallback models, privacy protection and image handling.
+
+    Uses a mocked Gemini SDK to ensure deterministic offline testing.
+    """
     def setUp(self):
+        """Create a sample hazard report shared by the Gemini tests."""
         self.report = HazardReport({
             "reporter_name": "Private Reporter",
             "reporter_contact": "private@example.com",
@@ -96,9 +108,24 @@ class GeminiAssessorTests(unittest.TestCase):
         with self.assertRaises(InvalidRecord):
             GeminiAssessor.parse_response(json.dumps({**GOOD, "severity": "Extreme"}))
 
+
+    # Test that missing credentials prevent any Gemini API request.
     def test_missing_api_key_fails_without_calling_sdk(self):
-        with self.assertRaises(AssessmentUnavailable):
-            GeminiAssessor(api_key="", models=("mock",)).assess(self.report)
+        modules, client = fake_sdk([])
+
+        with patch.dict(sys.modules, modules):
+            with self.assertRaises(AssessmentUnavailable):
+                GeminiAssessor(
+                    api_key="",
+                    models=("mock",),
+                ).assess(self.report)
+
+        # Verify the Gemini client was never initialized.
+        modules["google.genai"].Client.assert_not_called()
+
+        # Verify no assessment request was sent.
+        client.models.generate_content.assert_not_called()
+
 
     def test_timeout_then_success_retries_offline(self):
         modules, client = fake_sdk([

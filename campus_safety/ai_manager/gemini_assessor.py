@@ -1,304 +1,177 @@
-# FILE GUIDE: Concrete Gemini assessment provider: builds a privacy-aware prompt, sends an API request,
-# parses strict JSON, validates the result and retries failures without inventing a fallback assessment.
+# FILE GUIDE: Gemini API adapter: sends prompt and validated image evidence,
+# parses strict JSON, retries failures and tries configured fallback models.
+# Prompt privacy and image validation are delegated to focused helper classes.
 
-"""Gemini AI provider: live API call, prompt, JSON parsing and schema checks."""
+"""Gemini provider implementing the AssessmentProvider contract."""
+
 from __future__ import annotations
+
 import json
 import logging
 import os
-from pathlib import Path
-from io import BytesIO
-from typing import TYPE_CHECKING
 import time
-import re
+from typing import TYPE_CHECKING
+
+from campus_safety.ai_manager.ai_assessment import AIAssessment
+from campus_safety.ai_manager.assessment_provider import AssessmentProvider
+from campus_safety.ai_manager.assessment_unavailable import AssessmentUnavailable
+from campus_safety.ai_manager.gemini_prompt_builder import GeminiPromptBuilder
+from campus_safety.ai_manager.image_evidence_processor import (
+    IMAGE_FORMATS as IMAGE_FORMATS,
+    MAX_IMAGE_BYTES as MAX_IMAGE_BYTES,
+    MAX_IMAGE_PIXELS as MAX_IMAGE_PIXELS,
+    ImageEvidenceProcessor,
+)
+from campus_safety.domain.hazard_report import HazardReport
+from campus_safety.domain.invalid_record import InvalidRecord
 
 if TYPE_CHECKING:
     from google.genai.types import Part
-from campus_safety.ai_manager.assessment_provider import AssessmentProvider
-from campus_safety.ai_manager.ai_assessment import AIAssessment
-from campus_safety.domain.hazard_report import HazardReport
-from campus_safety.domain.invalid_record import InvalidRecord
-from campus_safety.ai_manager.assessment_unavailable import AssessmentUnavailable
 
 log = logging.getLogger(__name__)
 
-
-# Image evidence limits and supported formats.
-MAX_IMAGE_BYTES = 10 * 1024 * 1024  # Maximum 10 MiB.
-MAX_IMAGE_PIXELS = 50_000_000  # Maximum 50 million pixels.
-
-IMAGE_FORMATS = {
-    ".jpg": ("JPEG", "image/jpeg"),
-    ".jpeg": ("JPEG", "image/jpeg"),
-    ".png": ("PNG", "image/png"),
-    ".webp": ("WEBP", "image/webp"),
-}
+# Re-export image constants so older tests/imports remain compatible.
 
 
-# Live Google Gemini adapter implementing AssessmentProvider.
-# It handles prompt construction, optional image parts, strict parsing and bounded retries.
 class GeminiAssessor(AssessmentProvider):
-    """Concrete AI provider using the same five-field Gemini schema as Phase 1."""
+    """Obtain verified, five-field assessments from the live Gemini API.
 
-    # Read credentials/model preferences from explicit arguments or environment variables.
-    # Bound the per-model retry count to avoid an unbounded network loop.
-    def __init__(self, api_key: str | None = None,
-                 models: tuple[str, ...] | None = None,
-                 max_attempts: int = 2) -> None:
-        """Initialize the Gemini assessment provider.
+    Uses GeminiPromptBuilder and ImageEvidenceProcessor to keep prompt privacy
+    and image validation separate from API communication.
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        models: tuple[str, ...] | None = None,
+        max_attempts: int = 2,
+    ) -> None:
+        """Configure credentials, model fallback order, and retry attempts.
 
         Args:
-            api_key: Gemini API key. Defaults to the environment variable.
-            models: Model names to try in order. Defaults to configured models.
-            max_attempts: Maximum attempts per model, with a minimum of one.
+            api_key: Gemini API key, or GEMINI_API_KEY if omitted.
+            models: Ordered model names, or GEMINI_MODELS if omitted.
+            max_attempts: Number of attempts per model (at least one).
         """
-        self._api_key = api_key if api_key is not None else os.getenv("GEMINI_API_KEY", "")
-        self._models = models or tuple(x.strip() for x in
-                            os.getenv("GEMINI_MODELS", "gemini-3.8-flash,gemini-3.6-flash").split(",") if x.strip())
+        self._api_key = api_key if api_key is not None else os.getenv(
+            "GEMINI_API_KEY", ""
+        )
+        self._models = models or tuple(
+            value.strip()
+            for value in os.getenv(
+                "GEMINI_MODELS", "gemini-3.8-flash,gemini-3.6-flash"
+            ).split(",")
+            if value.strip()
+        )
         self._max_attempts = max(1, max_attempts)
 
+    # Preserve the original public/static helpers for existing callers/tests.
     @staticmethod
-    def _redact_personal_details(
-        value: object,
-        report: HazardReport,
-    ) -> str:
-        """Mask reporter identity, emails and common SG phone numbers."""
+    def _redact_personal_details(value: object, report: HazardReport) -> str:
+        """Delegate free-text redaction to GeminiPromptBuilder."""
+        return GeminiPromptBuilder.redact_personal_details(value, report)
 
-        text = str(value or "")
-
-        # Remove the reporter's name and contact if repeated in free text.
-        for field in ("reporter_name", "reporter_contact"):
-            identifier = str(report.get(field) or "").strip()
-
-            if identifier:
-                text = re.sub(
-                    rf"(?<!\w){re.escape(identifier)}(?!\w)",
-                    "[REDACTED]",
-                    text,
-                    flags=re.IGNORECASE,
-                )
-
-        # Mask email addresses.
-        text = re.sub(
-            r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
-            "[REDACTED EMAIL]",
-            text,
-        )
-
-        # Mask common Singapore phone-number formats.
-        text = re.sub(
-            r"(?<!\d)(?:\+65[\s-]?)?[689]\d{7}(?!\d)",
-            "[REDACTED PHONE]",
-            text,
-        )
-
-        return text
-
-    # Send hazard details and allowed JSON schema to Gemini, deliberately excluding reporter identity.
     @staticmethod
     def build_prompt(report: HazardReport) -> str:
-        """Build Gemini's five-field JSON prompt from a hazard report.
+        """Build the privacy-aware five-field assessment prompt."""
+        return GeminiPromptBuilder.build_prompt(report)
 
-        Args:
-            report: Validated campus hazard information.
-
-        Returns:
-            str: A structured prompt containing the location, headcount,
-                asset information and hazard description.
-
-        Privacy:
-            The reporter's name and contact details are excluded.
-        """
-
-        # Mask recognizable personal details in free-text fields.
-        location = GeminiAssessor._redact_personal_details(
-            report.location, report
-        )
-        asset_info = GeminiAssessor._redact_personal_details(
-            report.asset_info, report
-        )
-        description = GeminiAssessor._redact_personal_details(
-            report.get("description"), report
-        )
-        # Reporter identity is intentionally excluded, as in Phase 1.
-        return ("Analyze this campus safety hazard. Respond with ONLY a JSON object "
-                "containing exactly these five string keys: risk_summary, category, "
-                "severity, operational_impact, contextual_insights. "
-                "category: Electrical, Plumbing, Structural, HVAC, IT/Equipment; "
-                "severity: Low, Medium, High, Critical; operational_impact: "
-                "Minor, Moderate, Severe, Catastrophic.\n"
-                f"Location: {location}\n"
-                f"Impact Headcount: {report.get('impact_headcount')}\n"
-                f"Asset Information: {asset_info}\n"
-                f"Description: {description}")
-
-    # Strip optional Markdown fences, decode JSON and enforce the five-field schema.
-    # Raise InvalidRecord rather than guessing at missing or malformed model fields.
     @staticmethod
     def parse_response(raw: str) -> AIAssessment:
-        """Parse Gemini's JSON response into a validated AI assessment.
+        """Decode Gemini JSON into a validated five-field assessment.
 
         Args:
-            raw: Gemini response text, optionally wrapped in Markdown fences.
+            raw: Response text, possibly wrapped in Markdown code fences.
 
         Returns:
-            AIAssessment: Validated assessment containing five required fields.
+            AIAssessment: Validated five-field AI assessment.
 
         Raises:
-            InvalidRecord: If the response is empty, contains malformed JSON,
-                or does not satisfy the required assessment schema.
+            InvalidRecord: If response JSON is empty, malformed or invalid.
         """
         if not isinstance(raw, str) or not raw.strip():
             raise InvalidRecord("Empty AI response")
+
         cleaned = raw.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[-1]
-
             if cleaned.endswith("```"):
                 cleaned = cleaned[:-3]
+
         try:
             payload = json.loads(cleaned.strip())
         except (TypeError, json.JSONDecodeError) as exc:
             raise InvalidRecord("Malformed AI JSON") from exc
-        return AIAssessment.from_mapping(payload)
 
-    # Validate a local image and encode it as an SDK part; import the SDK only when required.
+        return AIAssessment.from_mapping(payload)
 
     @staticmethod
     def _image_part(path: str) -> Part:
-        """Validate image evidence and convert it into a Gemini image part.
+        """Delegate file validation and SDK part creation to ImageEvidenceProcessor."""
+        return ImageEvidenceProcessor.image_part(path)
 
-        Checks that the image exists, has a supported file extension,
-        does not exceed the size or resolution limits, and contains
-        valid image data matching its extension.
-
-        Args:
-            path: Local file path of the image evidence.
-
-        Returns:
-            Part: Validated image bytes with the correct MIME type.
-
-        Raises:
-            AssessmentUnavailable: If the image is missing, unsupported,
-                oversized, corrupted, or cannot be read.
-        """
-        # Import dependencies only when image evidence is provided.
-        try:
-            from google.genai import types
-            from PIL import Image
-        except ImportError as exc:
-            raise AssessmentUnavailable(
-                "Install google-genai and Pillow to use image evidence"
-            ) from exc
-
-        image = Path(path)
-        expected = IMAGE_FORMATS.get(image.suffix.lower())
-
-        # Step 1: Check file existence and supported extension.
-        if not image.is_file() or expected is None:
-            raise AssessmentUnavailable(
-                "Image evidence unavailable or unsupported"
-            )
-
-        expected_format, mime = expected
-
-        try:
-            # Step 2: Check size before reading image into memory.
-            byte_count = image.stat().st_size
-
-            if not 0 < byte_count <= MAX_IMAGE_BYTES:
-                raise AssessmentUnavailable(
-                    "Image evidence is empty or exceeds the 10 MiB size limit"
-                )
-
-            data = image.read_bytes()
-
-            if len(data) > MAX_IMAGE_BYTES:
-                raise AssessmentUnavailable(
-                    "Image evidence exceeds the 10 MiB size limit"
-                )
-
-            # Step 3: Verify the actual format, not just the filename.
-            with Image.open(BytesIO(data)) as candidate:
-                if candidate.format != expected_format:
-                    raise AssessmentUnavailable(
-                        "Image evidence format does not match the file extension"
-                    )
-
-                # Step 4: Reject images with excessive resolution.
-                if candidate.width * candidate.height > MAX_IMAGE_PIXELS:
-                    raise AssessmentUnavailable(
-                        "Image evidence resolution is too large"
-                    )
-
-                # Step 5: Verify image file integrity.
-                candidate.verify()
-
-            # Step 6: Confirm image data can be decoded.
-            with Image.open(BytesIO(data)) as candidate:
-                candidate.load()
-
-        except (OSError, ValueError, Image.DecompressionBombError) as exc:
-            raise AssessmentUnavailable(
-                "Image evidence is invalid or unreadable"
-            ) from exc
-
-        # Step 7: Create the Gemini image part after validation.
-        return types.Part.from_bytes(
-            data=data,
-            mime_type=mime,
-        )
-
-
-    # Call the real Gemini API with strict JSON output and optional image evidence.
-    # Try configured models/retries; every unsuccessful path raises AssessmentUnavailable (no fake success).
     def assess(self, report: HazardReport) -> AIAssessment:
-        """Request a Gemini assessment with retries and model fallback.
+        """Call Gemini with bounded retries and return only validated results.
 
         Args:
             report: Validated hazard report with optional image evidence.
 
         Returns:
-            AIAssessment: A validated AI result containing five fields.
+            AIAssessment: Verified five-field assessment.
 
         Raises:
-            AssessmentUnavailable: If credentials are missing, image evidence
-                is invalid, or all API attempts fail.
+            AssessmentUnavailable: If credentials, SDK, image evidence,
+                API attempts or response validation fail.
 
-        The method never generates a fake assessment on failure.
+        No placeholder assessment is created when the API is unavailable.
         """
         if not self._api_key:
             raise AssessmentUnavailable("GEMINI_API_KEY is not configured")
+
         try:
             from google import genai
             from google.genai import types
         except ImportError as exc:
             raise AssessmentUnavailable("Install google-genai to use Gemini") from exc
-        # The text prompt is always included; an optional image becomes a second multimodal part.
+
+        # Always include the text prompt; attach verified image evidence if present.
         contents = [self.build_prompt(report)]
         image_path = str(report.get("visual_evidence_path") or "")
         if image_path:
             try:
                 contents.append(self._image_part(image_path))
             except (OSError, ValueError) as exc:
-                raise AssessmentUnavailable("Image evidence could not be read") from exc
+                raise AssessmentUnavailable(
+                    "Image evidence could not be read"
+                ) from exc
+
         try:
-            with genai.Client(api_key=self._api_key,
-                              http_options=types.HttpOptions(timeout=60_000)) as client:
-                # Move on to another configured model if all attempts for the first fail.
+            with genai.Client(
+                api_key=self._api_key,
+                http_options=types.HttpOptions(timeout=60_000),
+            ) as client:
                 for model in self._models:
                     for attempt in range(self._max_attempts):
                         try:
                             response = client.models.generate_content(
-                                model=model, contents=contents,
-                                config=types.GenerateContentConfig(response_mime_type="application/json"))
+                                model=model,
+                                contents=contents,
+                                config=types.GenerateContentConfig(
+                                    response_mime_type="application/json"
+                                ),
+                            )
                             return self.parse_response(response.text or "")
                         except Exception as exc:
-                            # Non-matching models, transient network errors and schema errors
-                            # never become silently accepted 'offline' assessments.
-                            log.warning("AI attempt %d for %s failed: %s", attempt + 1, model, exc)
+                            # Never accept invalid JSON or failed API calls as success.
+                            log.warning(
+                                "AI attempt %d for %s failed: %s",
+                                attempt + 1,
+                                model,
+                                exc,
+                            )
                             if attempt + 1 < self._max_attempts:
                                 time.sleep(1)
         except Exception as exc:
             raise AssessmentUnavailable("Gemini connection unavailable") from exc
+
         raise AssessmentUnavailable("Gemini did not return a valid assessment")

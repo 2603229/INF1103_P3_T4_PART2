@@ -20,6 +20,11 @@ GOOD = {
 }
 
 class AIAssessmentValidationTests(unittest.TestCase):
+    """Verify that AIAssessment accepts valid data and rejects invalid values.
+
+    Tests field validation, approved classifications, whitespace
+    normalization and strict enforcement of the five-field AI schema.
+    """
 
     # Test 1: A valid assessment should be accepted.
     def test_valid_direct_construction(self):
@@ -74,6 +79,13 @@ class AIAssessmentValidationTests(unittest.TestCase):
         with self.assertRaises(InvalidRecord):
             AIAssessment.from_mapping(invalid_data)
 
+    # Test 8: Reject AI responses missing a required field.
+    def test_from_mapping_rejects_missing_fields(self):
+        incomplete_data = GOOD.copy()
+        del incomplete_data["contextual_insights"]
 
+        with self.assertRaises(InvalidRecord):
+            AIAssessment.from_mapping(incomplete_data)
+            
 if __name__ == "__main__":
     unittest.main()

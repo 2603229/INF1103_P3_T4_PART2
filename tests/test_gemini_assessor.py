@@ -11,7 +11,10 @@ from pathlib import Path
 
 from campus_safety.ai_manager.ai_assessment import AIAssessment
 from campus_safety.ai_manager.assessment_unavailable import AssessmentUnavailable
-from campus_safety.ai_manager.gemini_assessor import GeminiAssessor
+from campus_safety.ai_manager.gemini_assessor import (
+    GeminiAssessor,
+    MAX_IMAGE_BYTES,
+)
 from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.domain.invalid_record import InvalidRecord
 
@@ -310,6 +313,72 @@ class GeminiAssessorTests(unittest.TestCase):
             # Verify that the returned assessment is valid.
             self.assertEqual(result.as_dict(), GOOD)
 
+
+    def test_fake_png_contents_are_rejected(self):
+        """Reject a text file disguised as a PNG image."""
+
+        # Create a temporary file with a PNG extension.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "fake.png"
+
+            # The contents are plain text, not real PNG data.
+            file_path.write_text(
+                "This is not a PNG image",
+                encoding="utf-8",
+            )
+
+            # Attach the fake image to the hazard report.
+            self.report.set_runtime_image_path(str(file_path))
+
+            # Mock Gemini so no live API calls are made.
+            modules, client = fake_sdk([])
+
+            with patch.dict(sys.modules, modules):
+
+                # The invalid image must raise AssessmentUnavailable.
+                with self.assertRaises(AssessmentUnavailable):
+                    GeminiAssessor(
+                        api_key="fake-test-key",
+                        models=("mock",),
+                    ).assess(self.report)
+
+            # Gemini must never receive the invalid image.
+            client.models.generate_content.assert_not_called()
+
+
+    def test_oversized_image_is_rejected(self):
+        """Reject image evidence larger than the 10 MiB limit."""
+
+        # Create a temporary directory for the test file.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "large.png"
+
+            # Create a file that is one byte larger than the limit.
+            # seek() avoids writing 10 MiB of image data manually.
+            with file_path.open("wb") as stream:
+                stream.seek(MAX_IMAGE_BYTES)
+                stream.write(b"0")
+
+            # Attach the oversized file to the hazard report.
+            self.report.set_runtime_image_path(str(file_path))
+
+            # Mock Gemini so the test runs offline.
+            modules, client = fake_sdk([])
+
+            with patch.dict(sys.modules, modules):
+
+                # The image must be rejected because of its size.
+                with self.assertRaisesRegex(
+                    AssessmentUnavailable,
+                    "size limit",
+                ):
+                    GeminiAssessor(
+                        api_key="fake-test-key",
+                        models=("mock",),
+                    ).assess(self.report)
+
+            # Verify no Gemini API request was made.
+            client.models.generate_content.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

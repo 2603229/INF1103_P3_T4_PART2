@@ -60,12 +60,17 @@ def main():
     suite = unittest.TestSuite()
     loader = unittest.TestLoader()
 
+
+    # Discover all six AI Manager test files.
     for filename in (
         "test_ai_assessment_validation.py",
         "test_ai_manager.py",
         "test_assessment_provider.py",
         "test_gemini_assessor.py",
+        "test_gemini_prompt_builder.py",
+        "test_image_evidence_processor.py",
     ):
+
         suite.addTests(
             loader.discover(
                 start_dir=str(TESTS_DIR),

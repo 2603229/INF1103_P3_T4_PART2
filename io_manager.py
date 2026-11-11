@@ -146,7 +146,8 @@ class IOManager:
                         "impact_headcount", "asset_info", "description", "severity", "status"):
                 self.display_message(f"{key.replace('_', ' ').title()}: {report.get(key, 'N/A')}")
 
-    
+    # Displays the top 5 most frequently reported hazards, including their asset names and occurrence counts,
+    # or notifies the user if no reports are found.
     def view_frequent_hazards(self, counts: list[tuple[str, int]]) -> None:
         self.display_message("\nTOP 5 MOST FREQUENT HAZARDS")
         if not counts:

@@ -134,7 +134,7 @@ class DataManager:
             if status_filter and st != status_filter:
                 continue
 
-            # Match category
+            # Match category (e.g. Electrical, Infrastructure, Plumbing)
             cat = str(data.get("category", "")).lower()
             if category_filter and category_filter.lower() != cat:
                 continue

@@ -123,7 +123,26 @@ class IOManager:
                     "assessment_source", "final_priority", "recommended_action", "is_duplicate"):
             self.display_message(f"{key.replace('_',' ').title()}: {report.get(key, 'N/A')}")
 
-    
+    # Formats and prints a detailed breakdown of the successfully saved incident report
+    def submission_success(self, report: HazardReport) -> None:
+        self.display_message(f"\n[Success] Incident saved: {report.incident_id}")
+        for key in ("category", "severity", "operational_impact", "risk_summary",
+                    "contextual_insights", "historical_frequency", "priority_score",
+                    "final_priority", "recommended_action", "escalation_reason", "assigned_route",
+                    "is_duplicate", "status"):
+            self.display_message(f"{key.replace('_', ' ').title()}: {report.get(key, 'N/A')}")
+
+    # Displays a list of all logged hazard reports, including their unique incident IDs and key details, 
+    # or notifies the user if no reports are found.
+    def view_all_reports(self, reports: list[HazardReport]) -> None:
+        if not reports:
+            self.display_message("[Notice] No hazard reports found.")
+            return
+        self.display_message(f"\nTotal Reports Found: {len(reports)}")
+        for i, report in enumerate(reports, start=1):
+            self.display_message(f"\n--- Report {i} ---")
+            self.submission_success(report)
+
 # --- Verification / Unit Test Script for Subtask 1.5 ---
 if __name__ == "__main__":
     # Create mock storage for captured outputs

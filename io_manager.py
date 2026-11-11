@@ -98,6 +98,7 @@ class IOManager:
         desc = self._required("Describe the risk/safety hazard: ",
                             InputValidator.validate_description, "Minimum 15 characters required.")
 
+        # Connects the MediaHandler to attach optional images and bundles all collected fields into a HazardReport model instance.
         image = self._media_handler.attach_image(self.confirm)
         
         return HazardReport.from_input({

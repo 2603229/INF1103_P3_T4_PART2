@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from io_manager import IOManager
+from INF1103_P3_T4_PART2.campus_safety.io_manager.io_manager import IOManager
 
 def test_io_manager_menu_valid_choice():
     # Mock user input to return "1" immediately

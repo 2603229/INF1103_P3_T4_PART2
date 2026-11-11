@@ -107,6 +107,15 @@ class IOManager:
             "asset_info": asset, "description": desc, "image_patch": image
         })
 
+    # Displays calculation breakdowns for severity, operational impact, and frequency, along with the final priority score and classification.
+    def priority_calculation(self, report: HazardReport, decision: Decision) -> None:
+        b = decision.score_breakdown
+        self.display_message("\n========== PRIORITY SCORE CALCULATION ==========\n"
+                             f"Severity: {report.get('severity')} -> +{b['severity']}\n"
+                             f"Operational Impact: {report.get('operational_impact')} -> +{b['operational_impact']}\n"
+                             f"Historical Frequency: {report.get('historical_frequency')} -> +{b['historical_frequency']}\n"
+                             f"Priority Score: {decision.score}\nFinal Priority: {decision.priority}")
+
     
 # --- Verification / Unit Test Script for Subtask 1.5 ---
 if __name__ == "__main__":

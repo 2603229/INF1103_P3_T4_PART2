@@ -139,9 +139,12 @@ class IOManager:
             self.display_message("[Notice] No hazard reports found.")
             return
         self.display_message(f"\nTotal Reports Found: {len(reports)}")
-        for i, report in enumerate(reports, start=1):
-            self.display_message(f"\n--- Report {i} ---")
-            self.submission_success(report)
+        # Display structered list of reports with their details, including incident ID, reporter info, location, headcount, asset info, description, severity, and status.
+        for index, report in enumerate(reports, 1):
+            self.display_message(f"--- Report #{index} ---")
+            for key in ("incident_id", "reporter_name", "reporter_contact", "location",
+                        "impact_headcount", "asset_info", "description", "severity", "status"):
+                self.display_message(f"{key.replace('_', ' ').title()}: {report.get(key, 'N/A')}")
 
 # --- Verification / Unit Test Script for Subtask 1.5 ---
 if __name__ == "__main__":

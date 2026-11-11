@@ -80,6 +80,23 @@ class TestFacilitiesDataManagerSearch(unittest.TestCase):
         results = self.data_mgr.search(min_severity=4)
         self.assertEqual(len(results), 2)
 
+    def test_search_by_ai_severity_threshold(self) -> None:
+        reports = [
+            HazardReport.from_storage({
+                "incident_id": f"INCIDENT-{severity.upper()}",
+                "severity": severity,
+            })
+            for severity in ("Low", "Medium", "High", "Critical")
+        ]
+        data_mgr = DataManager(MockIncidentRepository(reports))
+
+        results = data_mgr.search(min_severity=3)
+
+        self.assertEqual(
+            [report["severity"] for report in results],
+            ["High", "Critical"],
+        )
+
     def test_search_combined_filters(self) -> None:
         results = self.data_mgr.search(
             location_query="Building E",

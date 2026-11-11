@@ -5,12 +5,12 @@
 """Data Manager: application-facing persistence operations."""
 from __future__ import annotations
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable
 from campus_safety.data_manager.incident_repository import IncidentRepository
 from campus_safety.data_manager.incident_exporter import IncidentExporter
 from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.domain.invalid_record import InvalidRecord
-from campus_safety.domain.schema import VALID_STATUSES
+from campus_safety.domain.schema import VALID_SEVERITIES, VALID_STATUSES
 from campus_safety.domain.incident_audit_entry import IncidentAuditEntry
 from campus_safety.domain.ai_review_entry import AIReviewEntry
 
@@ -115,11 +115,15 @@ class DataManager:
         location_query: str = "",
         status_filter: str = "",
         category_filter: str = "",
-        min_severity: int = 1
-    ) -> list[Dict[str, Any]]:
-        """Filters stored records based on facilities-specific criteria."""
+        min_severity: int = 1,
+    ) -> list[dict[str, Any]]:
+        """Filter stored records; severity thresholds rank Low=1 through Critical=4."""
         all_reports = self.load()
         results = []
+        severity_ranks = {
+            severity.casefold(): rank
+            for rank, severity in enumerate(VALID_SEVERITIES, start=1)
+        }
 
         for report in all_reports:
             data = report.as_dict()
@@ -140,8 +144,14 @@ class DataManager:
                 continue
 
             # Match severity threshold
-            sev = data.get("severity", 1)
-            if isinstance(sev, int) and sev < min_severity:
+            severity = data.get("severity", "Low")
+            if isinstance(severity, int) and not isinstance(severity, bool):
+                severity_rank = severity
+            else:
+                severity_rank = severity_ranks.get(
+                    str(severity).strip().casefold(), 1
+                )
+            if severity_rank < min_severity:
                 continue
 
             results.append(data)

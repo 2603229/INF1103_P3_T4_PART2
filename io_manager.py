@@ -123,7 +123,7 @@ class IOManager:
                     "assessment_source", "final_priority", "recommended_action", "is_duplicate"):
             self.display_message(f"{key.replace('_',' ').title()}: {report.get(key, 'N/A')}")
 
-
+    
 # --- Verification / Unit Test Script for Subtask 1.5 ---
 if __name__ == "__main__":
     # Create mock storage for captured outputs

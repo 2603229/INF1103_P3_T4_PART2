@@ -98,7 +98,15 @@ class IOManager:
         desc = self._required("Describe the risk/safety hazard: ",
                             InputValidator.validate_description, "Minimum 15 characters required.")
 
+        image = self._media_handler.attach_image(self.confirm)
+        
+        return HazardReport.from_input({
+            "reporter_name": name, "reporter_contact": contact,
+            "location": location, "impact_headcount": people,
+            "asset_info": asset, "description": desc, "image_patch": image
+        })
 
+    
 # --- Verification / Unit Test Script for Subtask 1.5 ---
 if __name__ == "__main__":
     # Create mock storage for captured outputs

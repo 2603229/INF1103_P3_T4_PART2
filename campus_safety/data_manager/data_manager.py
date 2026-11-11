@@ -116,14 +116,13 @@ class DataManager:
         status_filter: str = "",
         category_filter: str = "",
         min_severity: int = 1
-    ) -> List[Dict[str, Any]]:
+    ) -> list[Dict[str, Any]]:
         """Filters stored records based on facilities-specific criteria."""
-        all_records = self.load()
+        all_reports = self.load()
         results = []
 
-        for record in all_records:
-            # Convert domain object to dict for safe field inspection
-            data = record.as_dict()
+        for report in all_reports:
+            data = report.as_dict()
 
             # Match location keyword (case-insensitive)
             loc = str(data.get("location", "")).lower()
@@ -135,16 +134,16 @@ class DataManager:
             if status_filter and st != status_filter:
                 continue
 
-            # Match category (e.g. Electrical, Infrastructure, Plumbing)
+            # Match category
             cat = str(data.get("category", "")).lower()
             if category_filter and category_filter.lower() != cat:
                 continue
 
             # Match severity threshold
             sev = data.get("severity", 1)
-            if isinstance(sev, (int, float)) and sev < min_severity:
+            if isinstance(sev, int) and sev < min_severity:
                 continue
 
-            results.append(record)
+            results.append(data)
 
         return results

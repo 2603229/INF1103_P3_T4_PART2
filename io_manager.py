@@ -146,6 +146,15 @@ class IOManager:
                         "impact_headcount", "asset_info", "description", "severity", "status"):
                 self.display_message(f"{key.replace('_', ' ').title()}: {report.get(key, 'N/A')}")
 
+    
+    def view_frequent_hazards(self, counts: list[tuple[str, int]]) -> None:
+        self.display_message("\nTOP 5 MOST FREQUENT HAZARDS")
+        if not counts:
+            self.display_message("[Notice] No hazard reports found.")
+            return
+        for index, (name, count) in enumerate(counts, 1):
+            self.display_message(f"{index}. {name} — {count} report(s)")
+
 # --- Verification / Unit Test Script for Subtask 1.5 ---
 if __name__ == "__main__":
     # Create mock storage for captured outputs

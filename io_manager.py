@@ -116,7 +116,14 @@ class IOManager:
                              f"Historical Frequency: {report.get('historical_frequency')} -> +{b['historical_frequency']}\n"
                              f"Priority Score: {decision.score}\nFinal Priority: {decision.priority}")
 
-    
+    # Displays a pre-submission summary of the hazard report, allowing the user to review all entered information before final submission.
+    def pre_submission_summary(self, report: HazardReport) -> None:
+        self.display_message("\n========== PRE-SUBMISSION SUMMARY ==========")
+        for key in ("location", "asset_info", "category", "severity", "operational_impact",
+                    "assessment_source", "final_priority", "recommended_action", "is_duplicate"):
+            self.display_message(f"{key.replace('_',' ').title()}: {report.get(key, 'N/A')}")
+
+
 # --- Verification / Unit Test Script for Subtask 1.5 ---
 if __name__ == "__main__":
     # Create mock storage for captured outputs

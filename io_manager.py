@@ -16,9 +16,9 @@ IO Manager Summary:
 from __future__ import annotations
 from pathlib import Path
 from typing import Callable
-from campus_safety.models import Decision, HazardReport
-from .validators import InputValidator
-from .media import MediaHandler
+from models import Decision, HazardReport
+from validators import InputValidator
+from media import MediaHandler
 
 """IO Manager: CLI interaction and presentation, isolated from domain logic."""
 

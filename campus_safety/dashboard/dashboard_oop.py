@@ -958,3 +958,21 @@ class IncidentDashboard:
                 st.rerun()
             except (DataStoreError, InvalidRecord, OSError, ValueError) as exc:
                 st.error(f"Restore failed: {exc}", icon=None)
+
+    def _data_section(self, reports: list[HazardReport], records: list[dict[str, Any]]) -> None:
+        st.markdown(
+            '<div class="cs-flat-banner"><strong>Data stewardship</strong> · '
+            'Export incident snapshots and manage repository backups. '
+            'Restoration is a destructive operation and always requires confirmation.</div>',
+            unsafe_allow_html=True,
+        )
+        self._export_section(reports, records)
+        st.divider()
+        self._backup_section()
+
+    @staticmethod
+    def _empty_state(title: str, description: str) -> None:
+        st.markdown(
+            f'<div class="cs-empty"><strong>{escape(title)}</strong>'
+            f'{escape(description)}</div>', unsafe_allow_html=True,
+        )

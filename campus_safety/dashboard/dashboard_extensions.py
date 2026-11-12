@@ -28,3 +28,15 @@ def text(value: Any, fallback: str = "Not provided") -> str:
 def safe_html(value: Any) -> str:
     """Escape dynamic content before including it in a styled HTML fragment."""
     return escape(text(value), quote=True)
+
+def parse_report_time(value: Any) -> datetime | None:
+    """Read either legacy SGT timestamps or timezone-aware ISO timestamps."""
+    if not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=SG_TIMEZONE)
+        return moment.astimezone(SG_TIMEZONE)
+    except (ValueError, TypeError, OverflowError):
+        return None

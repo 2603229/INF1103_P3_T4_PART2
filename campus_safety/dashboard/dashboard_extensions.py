@@ -18,3 +18,9 @@ ACTIVE_STATUSES = {"Pending Review", "In Progress"}
 HIGH_PRIORITIES = {"High", "Critical", "Urgent", "Immediate"}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 MAX_EVIDENCE_BYTES = 12 * 1024 * 1024
+
+def text(value: Any, fallback: str = "Not provided") -> str:
+    """Convert a record value to nonempty display text."""
+    if value is None or str(value).strip().lower() in {"", "none", "nan"}:
+        return fallback
+    return str(value)

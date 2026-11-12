@@ -52,6 +52,10 @@ jobs:
       - name: Run AI Manager unit tests
         run: python -m tests.run_ai_tests
 
+      # Step 6b: Catch broken imports in the Streamlit dashboard (it has no unit tests).
+      - name: Check dashboard modules import
+        run: python -c "import campus_safety.dashboard.dashboard_oop"
+
       # Step 7: Run the complete offline test suite (all managers, workflow, storage).
       - name: Run full automated test suite
         run: python -m unittest discover -s tests -t . -v

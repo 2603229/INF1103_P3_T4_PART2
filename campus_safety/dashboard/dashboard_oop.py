@@ -661,3 +661,26 @@ class IncidentDashboard:
                     st.rerun()
                 except (DataStoreError, InvalidRecord, ValueError, OSError) as exc:
                     st.error(f"Delete failed: {exc}", icon=None)
+
+    def _history_section(self, incident_id: str) -> None:
+        _heading("Incident Status Audit Trail", "Status changes are separate from human reviews of AI output")
+        try:
+            entries = list(reversed(self._data_manager.status_history(incident_id)))
+        except (DataStoreError, InvalidRecord, ValueError) as exc:
+            st.error(f"Cannot load status history: {exc}", icon=None)
+            return
+        if not entries:
+            st.info("No status audit history exists. Legacy Part 1 records may have no creation entry.", icon=None)
+            return
+        st.caption(f"{len(entries)} recorded event(s), newest first")
+        for entry in entries:
+            with st.container(border=True):
+                c1, c2 = st.columns([3, 2])
+                with c1:
+                    previous = entry.previous_status or "Created"
+                    st.markdown(f"**{escape(previous)} → {escape(entry.new_status)}**")
+                    st.write(entry.reason)
+                with c2:
+                    st.caption(format_sg_time(entry.changed_at, include_seconds=True))
+                    st.caption(f"Incident: {entry.incident_id}")
+        st.caption("This is an application-level audit history, not a tamper-proof or identity-verified security log.")

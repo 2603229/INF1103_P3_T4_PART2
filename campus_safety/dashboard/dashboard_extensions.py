@@ -141,3 +141,26 @@ def monthly_counts(reports: Sequence[Mapping[str, Any]]) -> dict[str, int]:
         if moment:
             counts[moment.strftime("%Y-%m")] += 1
     return dict(sorted(counts.items()))
+
+def resolve_evidence_image(raw_path: Any, allowed_roots: Sequence[Path]) -> Path | None:
+    """Allow preview only of small image files inside approved data directories.
+
+    This deliberately refuses absolute paths outside the project/data directory,
+    including paths containing traversal segments in otherwise valid records.
+    """
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return None
+    path = Path(raw_path)
+    if path.suffix.casefold() not in IMAGE_EXTENSIONS:
+        return None
+    for root in allowed_roots:
+        permitted = root.expanduser().resolve()
+        candidate = (path if path.is_absolute() else permitted / path).resolve()
+        if not candidate.is_relative_to(permitted):
+            continue
+        try:
+            if candidate.is_file() and candidate.stat().st_size <= MAX_EVIDENCE_BYTES:
+                return candidate
+        except OSError:
+            continue
+    return None

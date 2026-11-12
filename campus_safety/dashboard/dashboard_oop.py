@@ -846,3 +846,31 @@ class IncidentDashboard:
             },
         }
         st.vega_lite_chart(chart_data, spec, width="stretch", theme=None)
+    
+    def _insights_section(self, records: list[dict[str, Any]]) -> None:
+        self._metric_cards(records)
+        if not records:
+            self._empty_state("No analytics yet", "Analytics will appear after records are submitted.")
+            return
+        st.markdown('<div class="cs-banner">These descriptive summaries use saved incident fields. They do not alter the AI or business-rule priority calculations.</div>', unsafe_allow_html=True)
+        top_left, top_right = st.columns(2, gap="large")
+        with top_left:
+            _heading("Incident categories", "Where reported hazards concentrate")
+            self._chart(count_by(records, "category"))
+        with top_right:
+            _heading("Severity mix", "Gemini-assessed severity distribution")
+            self._chart(count_by(records, "severity"))
+        lower_left, lower_right = st.columns(2, gap="large")
+        with lower_left:
+            _heading("Priority distribution", "Calculated operational priorities")
+            self._chart(count_by(records, "final_priority"))
+        with lower_right:
+            _heading("Monthly reporting trend", "Recorded incidents by month (SGT)")
+            monthly = monthly_counts(records)
+            if monthly:
+                st.line_chart(pd.DataFrame({"Reports": monthly}), width="stretch", height=265)
+            else:
+                st.caption("No parseable report timestamps available.")
+        _heading("Most frequently reported locations", "Ranked by the number of recorded reports")
+        hot = list(count_by(records, "location").items())[:12]
+        st.dataframe(pd.DataFrame(hot, columns=["Location", "Reports"]), hide_index=True, width="stretch")

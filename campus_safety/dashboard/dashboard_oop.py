@@ -607,3 +607,57 @@ class IncidentDashboard:
                 st.info("Evidence unavailable or outside approved local directories.", icon=None)
             else:
                 st.caption("No image evidence attached.")
+
+    def _manage_section(self, item: Mapping[str, Any]) -> None:
+        incident_id = str(item["incident_id"])
+        current = text(item.get("status"), "Pending Review")
+        _heading("Update incident status", "Every genuine change requires a reason and creates a permanent history entry in the active record")
+        if current not in VALID_STATUSES:
+            st.error("This record has an unrecognised status; validate its stored data before changing it.", icon=None)
+            return
+        with st.form(f"cs_status_form_{incident_id}", clear_on_submit=False):
+            status = st.selectbox("New status", VALID_STATUSES, index=VALID_STATUSES.index(current))
+            reason = st.text_area(
+                "Reason for change", placeholder="Describe the action, investigation or decision behind this change...",
+                max_chars=500, height=100,
+            )
+            saved = st.form_submit_button(
+                "Save status and record history", type="primary", width="stretch",
+                disabled=False,
+            )
+        if saved:
+            if status == current:
+                st.info("Status is unchanged; no new audit entry was created.", icon=None)
+            elif not reason.strip():
+                st.warning("Enter a reason before changing the status.", icon=None)
+            else:
+                try:
+                    changed = self._data_manager.update_status(incident_id, status, reason.strip())
+                    _toast("success" if changed else "error", (
+                        f"{incident_id}: status changed to {status}. Audit history saved."
+                        if changed else "The incident was not found; it may have been deleted elsewhere."
+                    ))
+                    st.rerun()
+                except (DataStoreError, InvalidRecord, ValueError, OSError) as exc:
+                    st.error(f"Status update failed: {exc}", icon=None)
+
+        st.divider()
+        with st.expander("Danger zone: delete incident"):
+            st.warning("Deleting removes the active record and its associated status/AI histories. Use a disposable test incident.", icon=None)
+            confirmation = st.checkbox(f"I understand that {incident_id} will be removed", key=f"cs_delete_confirm_{incident_id}")
+            typed = st.text_input("Type the incident ID to confirm", key=f"cs_delete_typed_{incident_id}")
+            if st.button(
+                "Delete selected incident", key=f"cs_delete_action_{incident_id}",
+                disabled=not confirmation or typed.strip() != incident_id,
+            ):
+                try:
+                    deleted = self._data_manager.delete(incident_id)
+                    if deleted:
+                        st.session_state.pop("cs_selected_incident", None)
+                    _toast("success" if deleted else "error", (
+                        f"{incident_id} deleted. A pre-change backup was requested by the repository."
+                        if deleted else "Incident no longer exists."
+                    ))
+                    st.rerun()
+                except (DataStoreError, InvalidRecord, ValueError, OSError) as exc:
+                    st.error(f"Delete failed: {exc}", icon=None)

@@ -63,3 +63,6 @@ class BackgroundExportService:
         for record in records:
             writer.writerow({key: cls._csv_cell(record.get(key)) for key in fields})
         return text.getvalue().encode("utf-8-sig")
+
+    def close(self) -> None:
+        self._executor.shutdown(wait=True, cancel_futures=False)

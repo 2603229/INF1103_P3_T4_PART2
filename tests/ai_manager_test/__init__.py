@@ -1,0 +1,1 @@
+"""Automated tests for the INF1103 Campus Safety Hazard Reporting System."""

@@ -8,7 +8,6 @@ status audit entries and saved AI reviews. New presentation-only capabilities
 live in dashboard_extensions.py; the new asynchronous CSV service lives in
 campus_safety/services/background_export_service.py.
 """
-
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -29,7 +28,7 @@ from campus_safety.domain.invalid_record import InvalidRecord
 from campus_safety.domain.schema import VALID_STATUSES
 from campus_safety.domain.ai_review_entry import REVIEW_DECISIONS
 from campus_safety.dashboard.background_export_service import BackgroundExportService
-from dashboard_extensions import (
+from campus_safety.dashboard.dashboard_extensions import (
     count_by, filter_reports, format_sg_time, monthly_counts,
     overview_metrics, parse_report_time, priority_score,
     resolve_evidence_image, safe_html, text,
@@ -49,6 +48,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
 
 # ---------------------------------------------------------------------------
 # PRESENTATION STYLING -- visual treatment; never a business-logic component.
@@ -170,6 +170,7 @@ h1, h2, h3 {font-family:'Manrope',sans-serif;letter-spacing:-0.03em;}
 </style>
 """
 
+
 # ---------------------------------------------------------------------------
 # UI-ONLY HELPERS -- no persistence, AI processing or domain state changes.
 # ---------------------------------------------------------------------------
@@ -208,6 +209,7 @@ def _export_service() -> BackgroundExportService:
 def _live_body(dashboard: "IncidentDashboard", page: str) -> None:
     """Refresh reads without blocking other widgets or requiring a live AI key."""
     dashboard._render_page_body(page)
+
 
 # ---------------------------------------------------------------------------
 # OOP DASHBOARD -- presentation layer associated with an injected DataManager.
@@ -314,7 +316,7 @@ class IncidentDashboard:
                 'No Gemini calls are made by this dashboard.</p>', unsafe_allow_html=True,
             )
         return page, live
-    
+
     def _render_page_body(self, page: str) -> None:
         try:
             reports = self._data_manager.load()
@@ -754,7 +756,7 @@ class IncidentDashboard:
                     st.caption(f"Reviewer: {entry.reviewer}")
                     st.caption(format_sg_time(entry.reviewed_at, include_seconds=True))
         st.caption("Reviewer names are self-entered, not verified. A flagged AI review does not automatically trigger escalation.")
-      
+
     def _chart(self, values: Mapping[str, int], label: str = "Count") -> None:
         """Render responsive horizontal bars with complete, readable category labels.
 
@@ -846,7 +848,7 @@ class IncidentDashboard:
             },
         }
         st.vega_lite_chart(chart_data, spec, width="stretch", theme=None)
-    
+
     def _insights_section(self, records: list[dict[str, Any]]) -> None:
         self._metric_cards(records)
         if not records:
@@ -933,7 +935,7 @@ class IncidentDashboard:
                 st.download_button("Download TXT", st.session_state["cs_txt_bytes"],
                                    file_name="campus_incidents.txt", mime="text/plain",
                                    key="cs_download_txt")
-                
+
     def _backup_section(self) -> None:
         _heading("Restore database backup", "Repository-managed snapshots are listed newest first")
         st.warning("Restoration replaces the active database. Test only with disposable incident data.", icon=None)
@@ -978,7 +980,7 @@ class IncidentDashboard:
         )
 
 # ---------------------------------------------------------------------------
-# APP ENTRY POINT 
+# APP ENTRY POINT
 # ---------------------------------------------------------------------------
 def incident_dashboard() -> None:
     """Construct the UI against the existing manager, handling startup failures."""

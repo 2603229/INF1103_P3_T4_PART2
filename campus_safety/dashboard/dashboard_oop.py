@@ -564,3 +564,46 @@ class IncidentDashboard:
             self._ai_review_section(incident)
         with activity_tab:
             self._history_section(incident_id)
+
+    def _detail_section(self, item: Mapping[str, Any]) -> None:
+        left, right = st.columns([1.5, 1], gap="large")
+        with left:
+            _heading("Report details")
+            _field("Description", item.get("description"))
+            details1, details2 = st.columns(2)
+            with details1:
+                _field("Location", item.get("location"))
+                _field("Reported", format_sg_time(item.get("timestamp")))
+                _field("Affected people", item.get("impact_headcount"))
+            with details2:
+                _field("Asset or equipment", item.get("asset_info"))
+                _field("Reporter", item.get("reporter_name"))
+                _field("Category", item.get("category"))
+            if st.toggle("Reveal reporter contact", value=False, key=f"cs_contact_{item.get('incident_id')}"):
+                _field("Reporter contact", item.get("reporter_contact"))
+            _heading("Response recommendation")
+            _field("Recommended action", item.get("recommended_action"))
+            _field("Assigned route", item.get("assigned_route"))
+            _field("Escalation reason", item.get("escalation_reason"))
+        with right:
+            _heading("Risk classification")
+            a, b = st.columns(2)
+            with a:
+                st.metric("Priority score", f"{priority_score(item):g}")
+                _field("Severity", item.get("severity"))
+            with b:
+                st.metric("Historical reports", text(item.get("historical_frequency"), "0"))
+                _field("Operational impact", item.get("operational_impact"))
+            _field("Possible duplicate", item.get("is_duplicate"))
+            _heading("Visual evidence")
+            roots = [PROJECT_ROOT]
+            extra = os.getenv("HAZARD_DATA_DIR")
+            if extra:
+                roots.append(Path(extra))
+            evidence = resolve_evidence_image(item.get("image_path"), roots)
+            if evidence:
+                st.image(str(evidence), caption="Uploaded incident evidence", width="stretch")
+            elif item.get("image_path"):
+                st.info("Evidence unavailable or outside approved local directories.", icon=None)
+            else:
+                st.caption("No image evidence attached.")

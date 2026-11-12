@@ -361,3 +361,43 @@ class IncidentDashboard:
                     f'<div class="cs-metric-note">{escape(note)}</div></div>',
                     unsafe_allow_html=True,
                 )
+
+    def _overview_section(self, records: list[dict[str, Any]]) -> None:
+        st.markdown('<div class="cs-eyebrow">AT A GLANCE</div>', unsafe_allow_html=True)
+        self._metric_cards(records)
+        if not records:
+            self._empty_state("No incidents recorded", "Submit a fictional report through the CLI; it will appear here when saved.")
+            return
+        stats = overview_metrics(records)
+        if stats["high_priority"]:
+            st.markdown(
+                '<div class="cs-notice"><strong>Attention needed:</strong> '
+                f'{stats["high_priority"]} active cases are rated high or critical. '
+                'Review these incidents in the priority queue below.</div>',
+                unsafe_allow_html=True,
+            )
+
+        col_left, col_right = st.columns([1.85, 1], gap="large")
+        with col_left:
+            _heading("Priority queue", "Open and manage the most urgent outstanding cases")
+            active = [r for r in records if text(r.get("status"), "Pending Review") in {"Pending Review", "In Progress"}]
+            active = filter_reports(active, sort="Highest risk first")[:8]
+            if active:
+                self._table(active, compact=True)
+                if st.button("Open incident workspace", key="cs_overview_open", type="primary"):
+                    st.session_state["cs_nav_request"] = "Incidents"
+                    st.rerun()
+            else:
+                st.success("There are no active incidents.", icon=None)
+        with col_right:
+            _heading("Current workload", "Incident distribution by status")
+            self._chart(count_by(records, "status"), label="Incidents")
+            if stats["awaiting_ai_review"]:
+                st.info(
+                    f"{stats['awaiting_ai_review']} Gemini-assessed case(s) have no human AI review yet.",
+                    icon=None,
+                )
+
+        _heading("Recently reported", "Five latest submissions · newest first")
+        recent = filter_reports(records, sort="Newest first")[:5]
+        self._recent_table(recent)

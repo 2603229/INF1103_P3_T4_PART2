@@ -754,3 +754,95 @@ class IncidentDashboard:
                     st.caption(f"Reviewer: {entry.reviewer}")
                     st.caption(format_sg_time(entry.reviewed_at, include_seconds=True))
         st.caption("Reviewer names are self-entered, not verified. A flagged AI review does not automatically trigger escalation.")
+      
+    def _chart(self, values: Mapping[str, int], label: str = "Count") -> None:
+        """Render responsive horizontal bars with complete, readable category labels.
+
+        The original vertical chart had a nominal x-axis. In the narrow
+        overview column, its labels collided and Vega hid intermediate ones.
+        A category y-axis gives every value its own row, regardless of sidebar
+        width. Long names are wrapped rather than truncated.
+        """
+        if not values:
+            st.caption("Not enough data to plot.")
+            return
+
+        chart_data = pd.DataFrame({"Dimension": list(values), label: list(values.values())})
+        chart_data[label] = pd.to_numeric(chart_data[label], errors="coerce").fillna(0)
+        chart_data = chart_data.sort_values(label, ascending=False, kind="stable").reset_index(drop=True)
+
+        # Each label has its own row. Vega accepts a string-array labelExpr,
+        # enabling multi-line y-axis labels when a category name is lengthy.
+        separator = "¦"
+        wrapped = [
+            separator.join(wrap_text(str(name), width=21, break_long_words=True,
+                                     break_on_hyphens=False)) or "Unspecified"
+            for name in chart_data["Dimension"]
+        ]
+        chart_data["AxisLabel"] = wrapped
+        chart_data["SortOrder"] = list(range(len(chart_data)))
+        longest_lines = max((part.count(separator) + 1 for part in wrapped), default=1)
+        row_height = max(45, 18 * longest_lines + 17)
+        chart_height = max(205, len(chart_data) * row_height + 20)
+
+        spec = {
+            "height": chart_height,
+            "padding": {"left": 4, "right": 14, "top": 5, "bottom": 4},
+            "mark": {
+                "type": "bar",
+                "size": 20,
+                "cornerRadiusTopRight": 7,
+                "cornerRadiusBottomRight": 7,
+                "color": "#4F8FC8",
+            },
+            "encoding": {
+                "y": {
+                    "field": "AxisLabel",
+                    "type": "nominal",
+                    "sort": {"field": "SortOrder", "order": "ascending"},
+                    "axis": {
+                        "title": None,
+                        "labelAngle": 0,
+                        "labelExpr": "split(datum.label, '¦')",
+                        "labelLineHeight": 15,
+                        "labelOverlap": False,
+                        "labelLimit": 180,
+                        "labelPadding": 9,
+                        "labelColor": "#000000",
+                        "domainColor": "#000000",
+                        "domainWidth": 1.3,
+                        "tickColor": "#000000",
+                        "tickWidth": 1.2,
+                    },
+                },
+                "x": {
+                    "field": label,
+                    "type": "quantitative",
+                    "scale": {"zero": True, "nice": True},
+                    "axis": {
+                        "title": None,
+                        "tickMinStep": 1,
+                        "tickCount": 5,
+                        "labelColor": "#000000",
+                        "labelPadding": 7,
+                        "domainColor": "#000000",
+                        "domainWidth": 1.3,
+                        "tickColor": "#000000",
+                        "tickWidth": 1.2,
+                        "grid": True,
+                        "gridColor": "#D9E0E7",
+                        "gridWidth": 1,
+                    },
+                },
+                "tooltip": [
+                    {"field": "Dimension", "type": "nominal", "title": "Category"},
+                    {"field": label, "type": "quantitative", "title": label},
+                ],
+            },
+            "config": {
+                "view": {"stroke": None},
+                "axis": {"labelFont": "DM Sans", "labelFontSize": 12},
+                "background": "#F7F9FC",
+            },
+        }
+        st.vega_lite_chart(chart_data, spec, width="stretch", theme=None)

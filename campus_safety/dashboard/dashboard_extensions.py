@@ -40,3 +40,10 @@ def parse_report_time(value: Any) -> datetime | None:
         return moment.astimezone(SG_TIMEZONE)
     except (ValueError, TypeError, OverflowError):
         return None
+    
+def format_sg_time(value: Any, include_seconds: bool = False) -> str:
+    moment = parse_report_time(value)
+    if moment is None:
+        return text(value, "Unknown time")
+    fmt = "%d %b %Y, %I:%M:%S %p" if include_seconds else "%d %b %Y, %I:%M %p"
+    return moment.strftime(fmt) + " SGT"

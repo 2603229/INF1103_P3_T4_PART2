@@ -24,3 +24,7 @@ def text(value: Any, fallback: str = "Not provided") -> str:
     if value is None or str(value).strip().lower() in {"", "none", "nan"}:
         return fallback
     return str(value)
+
+def safe_html(value: Any) -> str:
+    """Escape dynamic content before including it in a styled HTML fragment."""
+    return escape(text(value), quote=True)

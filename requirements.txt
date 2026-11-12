@@ -21,4 +21,4 @@ pillow>=9.5.0
 requests>=2.31.0
 
 # Browser-based incident management dashboard with periodic refresh.
-streamlit
+streamlit>=1.56,<2

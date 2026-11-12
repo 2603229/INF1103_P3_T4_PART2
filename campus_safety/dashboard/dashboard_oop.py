@@ -933,3 +933,28 @@ class IncidentDashboard:
                 st.download_button("Download TXT", st.session_state["cs_txt_bytes"],
                                    file_name="campus_incidents.txt", mime="text/plain",
                                    key="cs_download_txt")
+                
+    def _backup_section(self) -> None:
+        _heading("Restore database backup", "Repository-managed snapshots are listed newest first")
+        st.warning("Restoration replaces the active database. Test only with disposable incident data.", icon=None)
+        try:
+            backups = self._data_manager.backups()
+        except (DataStoreError, OSError, ValueError) as exc:
+            st.error(f"Cannot list backups: {exc}", icon=None)
+            return
+        if not backups:
+            st.info("No snapshots available. Backups are created before relevant changes.", icon=None)
+            return
+        st.caption(f"{len(backups)} available snapshot(s)")
+        selected = st.selectbox("Backup snapshot", backups, format_func=lambda path: Path(path).name,
+                                key="cs_backup_choice")
+        confirmed = st.checkbox("I understand that restoration will replace current records", key="cs_restore_confirm")
+        if st.button("Restore selected snapshot", disabled=not confirmed, key="cs_restore_action"):
+            try:
+                self._data_manager.restore(selected)
+                st.session_state.pop("cs_export_bytes", None)
+                st.session_state.pop("cs_txt_bytes", None)
+                _toast("success", f"Restored database snapshot: {Path(selected).name}")
+                st.rerun()
+            except (DataStoreError, InvalidRecord, OSError, ValueError) as exc:
+                st.error(f"Restore failed: {exc}", icon=None)

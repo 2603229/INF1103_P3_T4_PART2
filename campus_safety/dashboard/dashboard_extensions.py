@@ -107,3 +107,26 @@ def filter_reports(
     else:
         result.sort(key=lambda r: (priority_score(r), timestamp(r)), reverse=True)
     return result
+
+def overview_metrics(reports: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """Read-only operational indicators; no scoring policy is recalculated."""
+    statuses = [text(r.get("status"), "Pending Review") for r in reports]
+    active = sum(s in ACTIVE_STATUSES for s in statuses)
+    high = sum(
+        text(r.get("final_priority"), "").strip() in HIGH_PRIORITIES
+        and text(r.get("status"), "Pending Review") in ACTIVE_STATUSES
+        for r in reports
+    )
+    pending_ai_review = sum(
+        r.get("assessment_source") == "Gemini AI"
+        and not r.get("ai_review_history")
+        for r in reports
+    )
+    return {
+        "total": len(reports),
+        "active": active,
+        "high_priority": high,
+        "resolved": sum(s in {"Resolved", "Closed"} for s in statuses),
+        "pending_review": sum(s == "Pending Review" for s in statuses),
+        "awaiting_ai_review": pending_ai_review,
+    }

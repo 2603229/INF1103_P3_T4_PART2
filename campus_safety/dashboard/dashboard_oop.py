@@ -976,3 +976,31 @@ class IncidentDashboard:
             f'<div class="cs-empty"><strong>{escape(title)}</strong>'
             f'{escape(description)}</div>', unsafe_allow_html=True,
         )
+
+# ---------------------------------------------------------------------------
+# APP ENTRY POINT 
+# ---------------------------------------------------------------------------
+def incident_dashboard() -> None:
+    """Construct the UI against the existing manager, handling startup failures."""
+    backend = os.getenv("HAZARD_STORAGE_BACKEND", "json").strip().lower()
+    if demo_storage_configured(backend, os.environ):
+        st.markdown(STYLE, unsafe_allow_html=True)
+        st.error(
+            "A demo database path is still configured. Change SQLITE_DB_PATH, "
+            "INCIDENTS_DB or HAZARD_DATA_DIR to the team's real datastore "
+            "before launching this integration dashboard.",
+            icon=None,
+        )
+        return
+    try:
+        manager = DataManager(create_repository(backend))
+    except (DataStoreError, InvalidRecord, OSError, ValueError) as exc:
+        st.markdown(STYLE, unsafe_allow_html=True)
+        st.error(f"Incident database unavailable: {exc}", icon=None)
+        st.info("Check the selected storage backend, repository path and permissions. No records have been deleted or reset.")
+        return
+    IncidentDashboard(manager, backend).render()
+
+
+if __name__ == "__main__":
+    incident_dashboard()

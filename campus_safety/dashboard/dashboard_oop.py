@@ -541,3 +541,26 @@ class IncidentDashboard:
         )
         st.session_state["cs_selected_incident"] = selected
         self._case_workspace(by_id[selected])
+
+    def _case_workspace(self, incident: dict[str, Any]) -> None:
+        incident_id = str(incident["incident_id"])
+        col_h, col_s = st.columns([4, 2], vertical_alignment="center")
+        with col_h:
+            st.markdown(f"### {escape(incident_id)}")
+            st.caption(text(incident.get("asset_info"), "Campus hazard"))
+        with col_s:
+            st.markdown(
+                _badge(incident.get("final_priority")) + " &nbsp; " + _badge(incident.get("status")),
+                unsafe_allow_html=True,
+            )
+        details_tab, status_tab, ai_tab, activity_tab = st.tabs(
+            ["Case details", "Manage status", "AI assessment & review", "Activity history"]
+        )
+        with details_tab:
+            self._detail_section(incident)
+        with status_tab:
+            self._manage_section(incident)
+        with ai_tab:
+            self._ai_review_section(incident)
+        with activity_tab:
+            self._history_section(incident_id)

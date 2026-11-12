@@ -767,31 +767,88 @@ class IncidentDashboard:
         if current not in VALID_STATUSES:
             st.error("This record has an unrecognised status; validate its stored data before changing it.", icon=None)
             return
-        with st.form(f"cs_status_form_{incident_id}", clear_on_submit=False):
-            status = st.selectbox("New status", VALID_STATUSES, index=VALID_STATUSES.index(current))
-            reason = st.text_area(
-                "Reason for change", placeholder="Describe the action, investigation or decision behind this change...",
-                max_chars=500, height=100,
+
+        # Give each incident its own form state
+        choice_key = f"cs_status_choice_{incident_id}"
+        reason_key = f"cs_status_reason_{incident_id}"
+        observed_key = f"cs_status_observed_{incident_id}"
+
+        # Clear the reason after a successful save
+        if st.session_state.pop(f"cs_status_clear_{incident_id}", False):
+            st.session_state[reason_key] = ""
+
+        # Synchronise the dropdown with the saved status
+        if st.session_state.get(observed_key) != current:
+            st.session_state[choice_key] = current
+            st.session_state[observed_key] = current
+
+        with st.container(border=True):
+            # Dropdown is outside the form for live updates
+            status = st.selectbox(
+                "New status", VALID_STATUSES, key=choice_key
             )
-            saved = st.form_submit_button(
-                "Save status and record history", type="primary", width="stretch",
-                disabled=False,
-            )
+
+            if status != current:
+                st.caption(
+                    f"Preview: {current} → {status} (not saved yet)"
+                )
+            else:
+                st.caption(f"Current saved status: {current}")
+
+            with st.form(
+                f"cs_status_form_{incident_id}",
+                clear_on_submit=False,
+                border=False,
+            ):
+                reason = st.text_area(
+                    "Reason for change",
+                    placeholder="Describe the action, investigation or decision behind this change...",
+                    max_chars=500,
+                    height=100,
+                    key=reason_key,
+                )
+
+                saved = st.form_submit_button(
+                    "Save status and record history",
+                    type="primary",
+                    width="stretch",
+                )
+
         if saved:
             if status == current:
-                st.info("Status is unchanged; no new audit entry was created.", icon=None)
+                st.info(
+                    "Status is unchanged; no new audit entry was created.",
+                    icon=None,
+                )
             elif not reason.strip():
-                st.warning("Enter a reason before changing the status.", icon=None)
+                st.warning(
+                    "Enter a reason before changing the status.",
+                    icon=None,
+                )
             else:
                 try:
-                    changed = self._data_manager.update_status(incident_id, status, reason.strip())
-                    _toast("success" if changed else "error", (
-                        f"{incident_id}: status changed to {status}. Audit history saved."
-                        if changed else "The incident was not found; it may have been deleted elsewhere."
-                    ))
+                    changed = self._data_manager.update_status(
+                        incident_id, status, reason.strip()
+                    )
+
+                    if changed:
+                        st.session_state[
+                            f"cs_status_clear_{incident_id}"
+                        ] = True
+
+                    _toast(
+                        "success" if changed else "error",
+                        (
+                            f"{incident_id}: status changed to {status}. Audit history saved."
+                            if changed
+                            else "The incident was not found; it may have been deleted elsewhere."
+                        ),
+                    )
                     st.rerun()
+
                 except (DataStoreError, InvalidRecord, ValueError, OSError) as exc:
                     st.error(f"Status update failed: {exc}", icon=None)
+
 
         st.divider()
         with st.expander("Danger zone: delete incident"):
@@ -865,28 +922,90 @@ class IncidentDashboard:
                 "The domain model deliberately rejects reviews of unassessed records.",
                 icon=None,
             )
+
         else:
-            with st.form(f"cs_ai_review_{incident_id}", clear_on_submit=True):
-                decision = st.selectbox("Review decision", REVIEW_DECISIONS)
-                reviewer = st.text_input("Reviewer name", max_chars=100, placeholder="Enter your name")
-                reason = st.text_area("Review reason", max_chars=500,
-                                      placeholder="Explain why the AI assessment is accepted or requires further investigation...")
-                submitted = st.form_submit_button("Save AI review", type="primary", width="stretch")
+            decision_key = f"cs_ai_decision_{incident_id}"
+            reviewer_key = f"cs_ai_reviewer_{incident_id}"
+            reason_key = f"cs_ai_reason_{incident_id}"
+
+            # Reset fields only after a successful save
+            if st.session_state.pop(
+                f"cs_ai_clear_{incident_id}", False
+            ):
+                st.session_state[decision_key] = REVIEW_DECISIONS[0]
+                st.session_state[reviewer_key] = ""
+                st.session_state[reason_key] = ""
+
+            with st.container(border=True):
+                # Live dropdown selection
+                decision = st.selectbox(
+                    "Review decision",
+                    REVIEW_DECISIONS,
+                    key=decision_key,
+                )
+
+                st.caption(
+                    f"Selected decision: {decision} (not saved yet)"
+                )
+
+                with st.form(
+                    f"cs_ai_review_{incident_id}",
+                    clear_on_submit=False,
+                    border=False,
+                ):
+                    reviewer = st.text_input(
+                        "Reviewer name",
+                        max_chars=100,
+                        placeholder="Enter your name",
+                        key=reviewer_key,
+                    )
+
+                    reason = st.text_area(
+                        "Review reason",
+                        max_chars=500,
+                        placeholder="Explain why the AI assessment is accepted or requires further investigation...",
+                        key=reason_key,
+                    )
+
+                    submitted = st.form_submit_button(
+                        "Save AI review",
+                        type="primary",
+                        width="stretch",
+                    )
+
             if submitted:
                 if len(reviewer.strip()) < 2 or not reason.strip():
-                    st.warning("Enter a reviewer name (at least two characters) and a review reason.", icon=None)
+                    st.warning(
+                        "Enter a reviewer name (at least two characters) and a review reason.",
+                        icon=None,
+                    )
                 else:
                     try:
                         saved = self._data_manager.record_ai_review(
-                            incident_id, reviewer.strip(), decision, reason.strip()
+                            incident_id,
+                            reviewer.strip(),
+                            decision,
+                            reason.strip(),
                         )
-                        _toast("success" if saved else "error", (
-                            "Human AI feedback saved. Original Gemini assessment and priority were not changed."
-                            if saved else "The incident no longer exists."
-                        ))
+
+                        if saved:
+                            st.session_state[
+                                f"cs_ai_clear_{incident_id}"
+                            ] = True
+
+                        _toast(
+                            "success" if saved else "error",
+                            (
+                                "Human AI feedback saved. Original Gemini assessment and priority were not changed."
+                                if saved
+                                else "The incident no longer exists."
+                            ),
+                        )
                         st.rerun()
+
                     except (DataStoreError, InvalidRecord, ValueError, OSError) as exc:
                         st.error(f"AI review could not be saved: {exc}", icon=None)
+
 
         _heading("AI Review History", "Previously saved reviewer feedback, newest first")
         try:

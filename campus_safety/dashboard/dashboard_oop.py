@@ -271,3 +271,46 @@ class IncidentDashboard:
             'Human AI reviews are informational, not authenticated decisions.</div>',
             unsafe_allow_html=True,
         )
+
+    def _sidebar(self) -> tuple[str, bool]:
+        with st.sidebar:
+            st.markdown(
+                '<div class="cs-brand"><div class="cs-brandmark">CS</div>'
+                '<div><div class="cs-brandhead">Campus Safety</div>'
+                '<div class="cs-brandsub">Operations console</div></div></div>',
+                unsafe_allow_html=True,
+            )
+            request = st.session_state.pop("cs_nav_request", None)
+            if request in NAVIGATION:
+                st.session_state["cs_workspace"] = request
+            page = st.session_state.get("cs_workspace", "Overview")
+            if page not in NAVIGATION:
+                page = "Overview"
+            st.markdown('<div class="cs-side-label">WORKSPACE</div>', unsafe_allow_html=True)
+            links = (
+                ("Overview", ":material/space_dashboard:"),
+                ("Incidents", ":material/fact_check:"),
+                ("Insights", ":material/monitoring:"),
+                ("Data & backups", ":material/folder_copy:"),
+            )
+            for label, icon in links:
+                if st.button(label, icon=icon, width="stretch", key=f"cs_nav_{label}",
+                             type="primary" if page == label else "secondary"):
+                    if page != label:
+                        st.session_state["cs_workspace"] = label
+                        st.rerun()
+            st.divider()
+            st.markdown('<div class="cs-side-label">PREFERENCES</div>', unsafe_allow_html=True)
+            live = st.toggle("Auto-refresh summaries", value=True, key="cs_autorefresh")
+            st.markdown(
+                '<p class="cs-sidebar-note">Overview and insights refresh every 15s. '
+                'Incident forms remain stable while you work.</p>', unsafe_allow_html=True,
+            )
+            st.divider()
+            st.markdown('<div class="cs-side-label">CURRENT STORAGE</div>', unsafe_allow_html=True)
+            st.markdown(f"**{escape(self._backend)} repository**")
+            st.markdown(
+                '<p class="cs-sidebar-note">The data backend is configured locally. '
+                'No Gemini calls are made by this dashboard.</p>', unsafe_allow_html=True,
+            )
+        return page, live

@@ -218,3 +218,56 @@ class IncidentDashboard:
     def __init__(self, data_manager: DataManager, backend: str = "json") -> None:
         self._data_manager = data_manager
         self._backend = backend.upper()
+
+    def render(self) -> None:
+        st.markdown(STYLE, unsafe_allow_html=True)
+        page, live = self._sidebar()
+        header_title = {
+            "Overview": "Operations overview",
+            "Incidents": "Incident workspace",
+            "Insights": "Safety intelligence",
+            "Data & backups": "Data & recovery",
+        }[page]
+        safe_to_refresh = page in {"Overview", "Insights"}
+        refresh_label = (
+            "Auto-refresh: 15s" if live and safe_to_refresh else "Manual refresh"
+        )
+        header, right = st.columns([5, 1], vertical_alignment="bottom", gap="medium")
+        with header:
+            st.markdown(
+                '<header class="cs-page-header">'
+                '<div class="cs-eyebrow">Campus safety / operations</div>'
+                f'<h1 class="cs-title">{escape(header_title)}</h1>'
+                '<p class="cs-subtitle">Review incidents, assess risks and maintain a clear record of every decision.</p>'
+                '<div class="cs-meta">'
+                f'<span>{escape(self._backend)} repository</span>'
+                '<span class="cs-meta-dot"></span><span>Singapore time (SGT)</span>'
+                f'<span class="cs-meta-dot"></span><span>{escape(refresh_label)}</span>'
+                '</div></header>',
+                unsafe_allow_html=True,
+            )
+        with right:
+            if st.button("Refresh", icon=":material/refresh:", key="cs_refresh", width="stretch"):
+                st.rerun()
+
+        flash = st.session_state.pop("cs_flash", None)
+        if flash:
+            kind, message = flash
+            if kind == "success":
+                st.success(message, icon=None)
+            elif kind == "warning":
+                st.warning(message, icon=None)
+            else:
+                st.error(message, icon=None)
+
+        # Form pages deliberately do not auto-refresh: a periodic fragment rerun
+        # would disrupt partially completed status updates and AI reviews.
+        if live and safe_to_refresh:
+            _live_body(self, page)
+        else:
+            self._render_page_body(page)
+        st.markdown(
+            '<div class="cs-footer">Campus Safety Operations · Local incident management · '
+            'Human AI reviews are informational, not authenticated decisions.</div>',
+            unsafe_allow_html=True,
+        )

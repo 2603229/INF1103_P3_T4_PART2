@@ -130,3 +130,6 @@ def overview_metrics(reports: Sequence[Mapping[str, Any]]) -> dict[str, int]:
         "pending_review": sum(s == "Pending Review" for s in statuses),
         "awaiting_ai_review": pending_ai_review,
     }
+
+def count_by(reports: Sequence[Mapping[str, Any]], field: str) -> dict[str, int]:
+    return dict(Counter(text(row.get(field), "Unspecified") for row in reports).most_common())

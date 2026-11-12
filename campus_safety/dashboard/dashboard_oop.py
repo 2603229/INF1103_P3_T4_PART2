@@ -429,3 +429,115 @@ class IncidentDashboard:
             '<th>Reported</th><th>Priority</th><th>Status</th></tr></thead>'
             f'<tbody>{"".join(rows)}</tbody></table></div>', unsafe_allow_html=True,
         )
+
+    def _table(self, records: Sequence[Mapping[str, Any]], compact: bool = False) -> None:
+        table = []
+        for r in records:
+            table.append({
+                "Incident ID": text(r.get("incident_id"), ""),
+                "Reported (SGT)": format_sg_time(r.get("timestamp")),
+                "Location": text(r.get("location"), "—"),
+                "Category": text(r.get("category"), "—"),
+                "Severity": text(r.get("severity"), "—"),
+                "Priority": text(r.get("final_priority"), "—"),
+                "Score": priority_score(r),
+                "Status": text(r.get("status"), "Pending Review"),
+            })
+        df = pd.DataFrame(table)
+        # 'content' eliminates the artificial blank grid below short tables.
+        # Long pages retain scrolling inside a bounded table.
+        height = "content" if compact or len(df) <= 10 else 490
+        st.dataframe(df, hide_index=True, width="stretch", height=height)
+
+    def _incident_section(self, records: list[dict[str, Any]]) -> None:
+        if not records:
+            self._empty_state("Your incident queue is empty", "Create a report in the CLI to start tracking cases.")
+            return
+        _heading("Incident queue", "Find cases across location, severity, reporting details and status")
+        if st.session_state.pop("cs_clear_filters", False):
+            for key in ("cs_search", "cs_status_filter", "cs_category_filter", "cs_priority_filter", "cs_date_on"):
+                st.session_state.pop(key, None)
+        search_col, sort_col, reset_col = st.columns([2.5, 1.2, 0.8], vertical_alignment="bottom")
+        with search_col:
+            search = st.text_input("Search incidents", key="cs_search", placeholder="Search ID, location, description, asset, reporter...")
+        with sort_col:
+            sort = st.selectbox("Sort by", SORT_OPTIONS, key="cs_sort")
+        with reset_col:
+            if st.button("Clear filters", key="cs_reset", width="stretch"):
+                st.session_state["cs_clear_filters"] = True
+                st.rerun()
+
+        statuses = sorted({text(r.get("status"), "Pending Review") for r in records})
+        priorities = sorted({text(r.get("final_priority"), "Unassigned") for r in records})
+        categories = sorted({text(r.get("category"), "Uncategorised") for r in records})
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            status_sel = st.multiselect("Status", statuses, key="cs_status_filter", placeholder="All statuses")
+        with f2:
+            priority_sel = st.multiselect("Priority", priorities, key="cs_priority_filter", placeholder="All priorities")
+        with f3:
+            category_sel = st.multiselect("Category", categories, key="cs_category_filter", placeholder="All categories")
+
+        date_start: date | None = None
+        date_end: date | None = None
+        with st.expander("Date range and display options"):
+            dcol, pcol = st.columns([2, 1])
+            with dcol:
+                date_on = st.checkbox("Filter by reporting date", key="cs_date_on")
+                if date_on:
+                    dates = [moment.date() for r in records if (moment := parse_report_time(r.get("timestamp")))]
+                    if dates:
+                        chosen = st.date_input("Inclusive date range", value=(min(dates), max(dates)), key="cs_date_range")
+                        if isinstance(chosen, (list, tuple)) and len(chosen) == 2:
+                            date_start, date_end = chosen
+                        else:
+                            st.caption("Select both start and end dates to apply the filter.")
+            with pcol:
+                page_size = st.selectbox("Rows per page", [10, 20, 50], index=1, key="cs_page_size")
+
+        filtered = filter_reports(
+            records, search=search, statuses=status_sel, priorities=priority_sel,
+            categories=category_sel, date_start=date_start, date_end=date_end, sort=sort,
+        )
+        st.caption(f"Showing {len(filtered)} of {len(records)} incidents. Filters are applied locally to loaded records.")
+        if not filtered:
+            self._empty_state("No matching incidents", "Try a broader search or clear one of the filters.")
+            return
+
+        page_count = max(1, (len(filtered) + page_size - 1) // page_size)
+        st.session_state["cs_page"] = max(1, min(st.session_state.get("cs_page", 1), page_count))
+        page = st.session_state["cs_page"]
+        first = (page - 1) * page_size
+        self._table(filtered[first:first + page_size])
+        prev_col, page_col, next_col = st.columns([1, 4, 1], vertical_alignment="center")
+        with prev_col:
+            if st.button("Previous", disabled=page <= 1, key="cs_previous", width="stretch"):
+                st.session_state["cs_page"] -= 1
+                st.rerun()
+        with page_col:
+            st.caption(f"Page {page} of {page_count}")
+        with next_col:
+            if st.button("Next", disabled=page >= page_count, key="cs_next", width="stretch"):
+                st.session_state["cs_page"] += 1
+                st.rerun()
+
+        st.divider()
+        _heading("Case workspace", "Select an incident below to inspect details and manage its workflow")
+        by_id = {str(r.get("incident_id")): r for r in filtered if r.get("incident_id")}
+        if not by_id:
+            st.warning("None of the filtered incidents has a valid incident ID.", icon=None)
+            return
+        ids = list(by_id)
+        desired = st.session_state.get("cs_selected_incident")
+        if desired not in by_id:
+            desired = ids[0]
+        if st.session_state.get("cs_case_select") not in by_id:
+            st.session_state["cs_case_select"] = desired
+        selected = st.selectbox(
+            "Select a case", options=ids, index=ids.index(desired),
+            format_func=lambda key: f"{key}  |  {text(by_id[key].get('location'), 'Unknown location')}"
+                                   f"  |  {text(by_id[key].get('status'), 'Pending Review')}",
+            key="cs_case_select",
+        )
+        st.session_state["cs_selected_incident"] = selected
+        self._case_workspace(by_id[selected])

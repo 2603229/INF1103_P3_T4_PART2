@@ -1,5 +1,7 @@
 # 🛡️ Campus Safety Hazard Reporting System — INF1103 Part 2
 
+**P3 Team 4 · Singapore Institute of Technology (SIT)**  
+
 ## 1. 📌 Project overview
 
 This project refactors the Phase 1 Campus Safety Hazard Reporting System into a modular, object-oriented Python application. Students and staff submit hazard reports through a command-line interface (CLI). Each report is assessed by Google Gemini, prioritised by business rules and saved to a JSON or SQLite database.
@@ -17,7 +19,7 @@ Every **new report** follows the four-manager workflow, coordinated by `CampusSa
 | --- | --- |
 | 🆕 New feature | **Facilities Search & Summary Report** — Section 6 |
 | 🚀 Advanced feature | **SQLite database integration (full CRUD)** — Section 7.1 |
-| 🖥️ Additional extensions | Streamlit GUI dashboard and threaded CSV export — Section 7.4 |
+| 🖥️ Additional extensions | Streamlit dashboard, live form previews, saved-field resets and threaded CSV export — Sections 7.4–7.5 |
 | 🐳 Docker | `Dockerfile` — Section 8.2 |
 | ⚙️ CI | `.github/workflows/python-tests.yml` — Section 9 |
 | ✅ Tests | 182 offline tests — Section 9 |
@@ -38,7 +40,8 @@ The **Streamlit dashboard** (Section 7.4) works on the same database and adds ma
 - 📜 **Incident Status Audit Trail** — change an incident's status with a reason and view its history.
 - 👤 **AI Assessment Review & Feedback** — accept, flag or request further review of a Gemini assessment.
 - 📤 **Export** — CSV (prepared in a background thread) and TXT downloads.
-- 🗃️ **Backup and restore** — automatic pre-change backups and confirmed restores; incident deletion.
+- 🗃️ **Backup and restore** — automatic pre-change backups and confirmed restores; incident deletion is available in the incident workspace.
+- ✨ **Live form feedback** — status and AI-review decisions preview immediately; typed fields clear after successful saves, not after invalid submissions.
 
 ## 3. 🔄 How the managers work together
 
@@ -184,16 +187,53 @@ Staff can record **Accepted**, **Flagged as Incorrect** or **Further Review Requ
 
 **Implementation:** `campus_safety/dashboard/` — `dashboard_oop.py` (`IncidentDashboard`), `dashboard_extensions.py` (presentation helpers) and `background_export_service.py` (`BackgroundExportService`).
 
-| Page | What staff can do |
+The dashboard is organised into four navigation pages:
+
+| Page | Features |
 | --- | --- |
-| Overview | Live metrics and priority queue (auto-refresh every 15 seconds) |
-| Incidents | Search, filter and sort incidents; view details and image evidence; change status with a reason; view the Audit Trail; record an AI review |
-| Insights | Charts by category, severity and priority; monthly trend; most-reported locations |
-| Data & backups | Prepare a CSV export in a background thread, download TXT, restore backups, delete test incidents |
+| **Overview** | Total, active, high-priority and resolved counters; priority queue; workload-by-status chart; recently reported incidents. Summaries can auto-refresh every 15 seconds. |
+| **Incidents** | Search, status/priority/category/date filters, sorting and pagination; inspect case details and image evidence; update status, save human AI reviews, view both histories, or delete a case with confirmation. |
+| **Insights** | Incident category, severity and priority charts; monthly reporting trend; frequently reported locations. |
+| **Data & backups** | Prepare incident CSV exports in a worker thread; download CSV/TXT; list and restore available repository backups after confirmation. |
 
-`IncidentDashboard` receives a `DataManager` and never touches SQL or Gemini directly; every change goes through `DataManager`, so the CLI and dashboard share the same validation and data. `BackgroundExportService` owns a `ThreadPoolExecutor` and builds the CSV from a snapshot of the records, so the page stays responsive while the file is prepared.
+`IncidentDashboard` receives a `DataManager` and does not access SQL or Gemini directly. The dashboard and CLI therefore reuse the same persistence, validation and incident domain logic. `BackgroundExportService` uses a `ThreadPoolExecutor` to produce a CSV from an incident snapshot without blocking the rest of the dashboard.
 
-Both the CLI and the dashboard read `.env`, so they use the same backend and database file. Reviewer names are self-entered; the dashboard is not an authenticated product and should not be deployed publicly.
+The dashboard displays **Singapore time (SGT)** where timestamps are shown. Auto-refresh is limited to Overview and Insights; incident forms deliberately do not refresh every 15 seconds to avoid interrupting edits. Charts and controls use a high-contrast light presentation theme, including readable white text on blue primary action buttons.
+
+> **Security scope:** This is a local prototype, not an authenticated operational deployment. A reviewer name is self-entered, and status audit entries are application-level history rather than tamper-proof security logs. Do not expose the dashboard publicly or use real personal information for demonstration data.
+
+### 7.5 ✨ Live status and AI-review forms (November 2026 update)
+
+**Implementation:** `IncidentDashboard._manage_section()` and `IncidentDashboard._ai_review_section()` in `campus_safety/dashboard/dashboard_oop.py`.
+
+These are **interface-level improvements** to existing `DataManager` operations. No repository schema, priority rules or saved Gemini assessment fields are changed.
+
+| Form / field | Interaction before saving | After a successful save | Invalid or unsuccessful save |
+| --- | --- | --- | --- |
+| **New status** | Dropdown selection shows an immediate preview, e.g. `In Progress → Resolved (not saved yet)`. | Reflects the newly stored status. | Selected status is retained for correction. |
+| **Reason for change** | Required for a genuine status change. | Text box clears on the next rerun. | Entered text remains available. |
+| **Review decision** | Dropdown shows the selected `Accepted`, `Flagged as Incorrect`, or `Further Review Requested` decision immediately. | Resets to the first supported option (`Accepted`). | Selected decision remains available. |
+| **Reviewer name** | Required (at least two non-whitespace characters). | Text box clears on the next rerun. | Entered text remains available. |
+| **Review reason** | Required for a saved human AI review. | Text box clears on the next rerun. | Entered text remains available. |
+
+**How it works:**
+
+1. Choose a **New status** or **Review decision** from a dropdown. The dropdown is **outside** its `st.form()`, so Streamlit immediately redraws the preview as the selection changes. This is only a preview; **no database write occurs**.
+2. Enter the reason (and reviewer name for AI feedback). Press the appropriate **Save** button to submit the form.
+3. The dashboard validates the submission. A status that has not changed does not create another audit event; a genuine status change requires a reason. AI reviews require a reviewer name and reason, and are allowed only when the incident has a complete saved Gemini assessment.
+4. On successful persistence through `DataManager.update_status()` or `DataManager.record_ai_review()`, a per-incident `st.session_state` reset flag is set. On rerun, the text inputs are cleared and the saved status or default review decision is shown.
+5. When validation fails or a save fails, the reset flag is not set, so the user can correct the form instead of starting over.
+
+**Important UI detail:** Because a selection outside `st.form()` triggers a rerun, **choose the dropdown value before typing long unsaved form text**. Live preview does not mean auto-save.
+
+**Manual demonstration / verification (use a disposable test database):**
+
+- **Status change:** Select an incident that is `Pending Review`, choose `In Progress`, confirm the live preview, enter a reason, save, then confirm the reason clears and an entry appears in **Activity history**.
+- **AI review:** On a record with a completed Gemini assessment, choose `Flagged as Incorrect`, confirm the preview, enter a fictional reviewer name and reason, save, then confirm the inputs clear, the decision resets to `Accepted`, and the saved entry appears in **AI Review History**.
+- **Validation:** Try submitting a status change with an empty reason or an AI review without a reviewer name. The warning should appear, and existing typed data should not be intentionally reset.
+- **Data integrity:** Confirm that changing a review decision does **not** overwrite Gemini category, severity, risk summary, priority, or the incident's status.
+
+The relevant UI state keys are scoped by incident ID (`cs_status_*_{incident_id}` and `cs_ai_*_{incident_id}`), so the forms of different incidents do not deliberately share values.
 
 ## 8. 🛠️ Installation and run guide
 
@@ -213,7 +253,7 @@ python main.py                                                   # CLI
 python -m streamlit run campus_safety/dashboard/dashboard_oop.py # dashboard (second terminal)
 ```
 
-The dashboard opens at **http://localhost:8501**. Always start it from the project root with `python -m streamlit` so the `campus_safety` package can be imported.
+The dashboard opens at **http://localhost:8501**. Always start it from the project root with `python -m streamlit` so the `campus_safety` package can be imported. To use both interfaces together, run the CLI and Streamlit dashboard in **separate PowerShell terminals**. Keep `HAZARD_STORAGE_BACKEND` and the database path consistent across both.
 
 If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process Bypass` in that terminal and try again. SQLite is part of Python's standard library; do **not** install a separate `sqlite3` package.
 
@@ -249,12 +289,31 @@ Inside the container, data is stored in the `/data` volume (`HAZARD_DATA_DIR=/da
 
 Never commit `.env`, share your key or show it in screenshots. Changing the backend does **not** transfer existing records. Use **fictional test data** when demonstrating the application.
 
+### 8.4 🎨 Optional Streamlit theme
+
+The dashboard contains its own `STYLE` CSS in `dashboard_oop.py`; **there is no required `dashboard_style.py` file**. To keep Streamlit's native controls consistent with the light dashboard, you may add `.streamlit/config.toml` in the project root:
+
+```toml
+[theme]
+base = "light"
+primaryColor = "#176B9C"
+backgroundColor = "#F5F8FC"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#17324D"
+borderColor = "#CBD9E6"
+font = "sans serif"
+```
+
+This file is optional. If you include it, keep it at **`<project root>/.streamlit/config.toml`**, not inside `campus_safety/dashboard/`.
+
+
 ## 9. ✅ Automated tests and CI
 
-All tests run offline using stubs, mocks and temporary databases; no Gemini key or network access is required.
+The documented automated suite runs offline using stubs, mocks and temporary databases; no Gemini key or network access is required. **The 182-test count describes the existing baseline**; rerun the suite after updating dashboard code. The live Streamlit preview and clearing behaviour must also be checked manually because the unit-test suite does not establish that the browser UI behaves correctly.
 
 ```powershell
-python -m unittest discover -s tests -t . -v      # 182 unittest tests
+python -m py_compile campus_safety/dashboard/dashboard_oop.py  # syntax check
+python -m unittest discover -s tests -t . -v      # 182 unittest tests in the documented baseline
 python -m tests.run_ai_tests                      # formatted AI Manager report
 ```
 
@@ -317,7 +376,7 @@ INF1103_P3_T4_PART2/
 │   ├── logic_manager/                 # Scorers, priority rules, routing and facilities summary
 │   ├── data_manager/                  # JSON/SQLite repositories, storage, export and factory
 │   └── dashboard/
-│       ├── dashboard_oop.py           # Streamlit management dashboard
+│       ├── dashboard_oop.py           # Streamlit dashboard, live previews and clear-on-save forms
 │       ├── dashboard_extensions.py    # Dashboard presentation helpers
 │       ├── background_export_service.py
 │       ├── README_INTEGRATION.md      # Dashboard's earlier integration notes
@@ -336,6 +395,7 @@ INF1103_P3_T4_PART2/
 │   ├── test_facilities_logic_manager_summary.py
 │   ├── test_facilities_workflow_integration.py
 │   └── test_facility_summary_domain.py
+├── .streamlit/config.toml             # Optional native widget theme (if configured)
 ├── main.py                            # CLI entry point
 ├── Dockerfile
 ├── .dockerignore
@@ -368,6 +428,7 @@ INF1103_P3_T4_PART2/
 - **OCP:** new behaviour is added by writing a new subclass, without editing existing classes: a new `PriorityRule`, `Scorer`, `TextMatcher`, `AssessmentProvider` or `IncidentRepository`. `test_custom_rule_can_be_added_without_editing_evaluator` demonstrates this. (A new storage backend name must still be registered in `repository_factory.py`.)
 - **LSP:** `JsonIncidentRepository` and `SQLiteIncidentRepository` pass the **same** test contract in `test_data_repositories.py`; `ConstantProvider`/`StubProvider` replace `GeminiAssessor`; `ExactMatcher` replaces `FuzzyMatcher`. Client code is unchanged in every case.
 - **DIP:** `CampusSafetyApplication`, `AIManager`, `DataManager` and `LogicManager` receive their collaborators through constructors; only `create_default()` chooses the concrete classes.
+
 
 ## 👥 Created By
 

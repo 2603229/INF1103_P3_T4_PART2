@@ -401,3 +401,31 @@ class IncidentDashboard:
         _heading("Recently reported", "Five latest submissions · newest first")
         recent = filter_reports(records, sort="Newest first")[:5]
         self._recent_table(recent)
+
+    @staticmethod
+    def _recent_table(records: Sequence[Mapping[str, Any]]) -> None:
+        """An exact, five-row recent-activity table (no virtualised blank rows)."""
+        if not records:
+            st.caption("No recent incidents.")
+            return
+        rows = []
+        for item in records:
+            identifier = safe_html(item.get("incident_id"))
+            location = safe_html(item.get("location"))
+            category = safe_html(item.get("category"))
+            reported = escape(format_sg_time(item.get("timestamp")))
+            rows.append(
+                '<tr>'
+                f'<td class="cs-id">{identifier}</td>'
+                f'<td><span class="cs-loc">{location}</span><div class="cs-small">{category}</div></td>'
+                f'<td class="cs-small">{reported}</td>'
+                f'<td>{_badge(item.get("final_priority"))}</td>'
+                f'<td>{_badge(item.get("status"))}</td>'
+                '</tr>'
+            )
+        st.markdown(
+            '<div class="cs-table-wrap"><table class="cs-table">'
+            '<thead><tr><th>Case ID</th><th>Location / category</th>'
+            '<th>Reported</th><th>Priority</th><th>Status</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div>', unsafe_allow_html=True,
+        )

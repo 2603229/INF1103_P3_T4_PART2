@@ -169,3 +169,42 @@ h1, h2, h3 {font-family:'Manrope',sans-serif;letter-spacing:-0.03em;}
 }
 </style>
 """
+
+# ---------------------------------------------------------------------------
+# UI-ONLY HELPERS -- no persistence, AI processing or domain state changes.
+# ---------------------------------------------------------------------------
+def _badge(value: Any) -> str:
+    val = text(value, "Unassigned")
+    css = val.lower().replace(" ", "-")
+    if css not in {"critical", "high", "medium", "low", "pending-review", "in-progress", "resolved", "closed"}:
+        css = "neutral"
+    return f'<span class="cs-pill {css}">{escape(val)}</span>'
+
+
+def _field(label: str, value: Any) -> None:
+    st.markdown(
+        f'<div class="cs-inlinebox"><div class="cs-fieldlabel">{escape(label)}</div>'
+        f'<div class="cs-fieldvalue">{safe_html(value)}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _heading(label: str, subtitle: str = "") -> None:
+    st.markdown(f'<div class="cs-section">{escape(label)}</div>', unsafe_allow_html=True)
+    if subtitle:
+        st.markdown(f'<div class="cs-caption">{escape(subtitle)}</div>', unsafe_allow_html=True)
+
+
+def _toast(kind: str, message: str) -> None:
+    st.session_state["cs_flash"] = (kind, message)
+
+
+@st.cache_resource(show_spinner=False)
+def _export_service() -> BackgroundExportService:
+    return BackgroundExportService(max_workers=2)
+
+
+@st.fragment(run_every="15s")
+def _live_body(dashboard: "IncidentDashboard", page: str) -> None:
+    """Refresh reads without blocking other widgets or requiring a live AI key."""
+    dashboard._render_page_body(page)

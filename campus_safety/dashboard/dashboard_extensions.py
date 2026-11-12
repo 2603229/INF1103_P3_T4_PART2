@@ -53,3 +53,57 @@ def priority_score(row: Mapping[str, Any]) -> float:
         return float(row.get("priority_score") or 0)
     except (ValueError, TypeError):
         return 0.0
+    
+def filter_reports(
+    reports: Sequence[Mapping[str, Any]],
+    *,
+    search: str = "",
+    statuses: Sequence[str] = (),
+    priorities: Sequence[str] = (),
+    categories: Sequence[str] = (),
+    date_start: date | None = None,
+    date_end: date | None = None,
+    sort: str = "Highest risk first",
+) -> list[dict[str, Any]]:
+    """Apply case-insensitive search, optional filters and stable sort."""
+    needle = search.strip().casefold()
+    result = []
+    searchable = (
+        "incident_id", "reporter_name", "location", "asset_info",
+        "category", "severity", "description", "assigned_route",
+    )
+    for item in reports:
+        row = dict(item)
+        if needle and not any(needle in str(row.get(field) or "").casefold() for field in searchable):
+            continue
+        if statuses and text(row.get("status"), "Pending Review") not in statuses:
+            continue
+        if priorities and text(row.get("final_priority"), "Unassigned") not in priorities:
+            continue
+        if categories and text(row.get("category"), "Uncategorised") not in categories:
+            continue
+        if date_start or date_end:
+            moment = parse_report_time(row.get("timestamp"))
+            if moment is None:
+                continue
+            if date_start and moment.date() < date_start:
+                continue
+            if date_end and moment.date() > date_end:
+                continue
+        result.append(row)
+
+    def timestamp(row: Mapping[str, Any]) -> float:
+        moment = parse_report_time(row.get("timestamp"))
+        return moment.timestamp() if moment else 0
+
+    if sort == "Oldest first":
+        result.sort(key=timestamp)
+    elif sort == "Newest first":
+        result.sort(key=timestamp, reverse=True)
+    elif sort == "Lowest risk first":
+        result.sort(key=lambda r: (priority_score(r), timestamp(r)))
+    elif sort == "Location A–Z":
+        result.sort(key=lambda r: text(r.get("location"), "").casefold())
+    else:
+        result.sort(key=lambda r: (priority_score(r), timestamp(r)), reverse=True)
+    return result

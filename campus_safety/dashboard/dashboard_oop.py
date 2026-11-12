@@ -684,3 +684,73 @@ class IncidentDashboard:
                     st.caption(format_sg_time(entry.changed_at, include_seconds=True))
                     st.caption(f"Incident: {entry.incident_id}")
         st.caption("This is an application-level audit history, not a tamper-proof or identity-verified security log.")
+
+    def _ai_review_section(self, item: Mapping[str, Any]) -> None:
+        incident_id = str(item["incident_id"])
+        _heading(
+            "Saved Gemini assessment",
+            "Human feedback does not alter the original assessment, priority or status",
+        )
+        assessed = item.get("assessment_source") == "Gemini AI" and all(
+            str(item.get(key) or "").strip() for key in ("category", "severity", "risk_summary")
+        )
+        details_left, details_right = st.columns(2)
+        with details_left:
+            _field("AI category", item.get("category"))
+            _field("AI severity", item.get("severity"))
+        with details_right:
+            _field("Operational impact", item.get("operational_impact"))
+            _field("Calculated priority", item.get("final_priority"))
+        _field("Risk summary", item.get("risk_summary"))
+        with st.expander("Contextual AI insights"):
+            st.write(text(item.get("contextual_insights")))
+
+        st.divider()
+        _heading("Human assessment review", "Attach a documented decision without overwriting the saved AI result")
+        if not assessed:
+            st.warning(
+                "Review is unavailable: this record does not contain a complete saved Gemini assessment. "
+                "The domain model deliberately rejects reviews of unassessed records.",
+                icon=None,
+            )
+        else:
+            with st.form(f"cs_ai_review_{incident_id}", clear_on_submit=True):
+                decision = st.selectbox("Review decision", REVIEW_DECISIONS)
+                reviewer = st.text_input("Reviewer name", max_chars=100, placeholder="Enter your name")
+                reason = st.text_area("Review reason", max_chars=500,
+                                      placeholder="Explain why the AI assessment is accepted or requires further investigation...")
+                submitted = st.form_submit_button("Save AI review", type="primary", width="stretch")
+            if submitted:
+                if len(reviewer.strip()) < 2 or not reason.strip():
+                    st.warning("Enter a reviewer name (at least two characters) and a review reason.", icon=None)
+                else:
+                    try:
+                        saved = self._data_manager.record_ai_review(
+                            incident_id, reviewer.strip(), decision, reason.strip()
+                        )
+                        _toast("success" if saved else "error", (
+                            "Human AI feedback saved. Original Gemini assessment and priority were not changed."
+                            if saved else "The incident no longer exists."
+                        ))
+                        st.rerun()
+                    except (DataStoreError, InvalidRecord, ValueError, OSError) as exc:
+                        st.error(f"AI review could not be saved: {exc}", icon=None)
+
+        _heading("AI Review History", "Previously saved reviewer feedback, newest first")
+        try:
+            entries = list(reversed(self._data_manager.ai_review_history(incident_id)))
+        except (DataStoreError, InvalidRecord, ValueError) as exc:
+            st.error(f"Cannot load AI review history: {exc}", icon=None)
+            return
+        if not entries:
+            st.caption("No AI assessment reviews have been recorded for this incident.")
+        for entry in entries:
+            with st.container(border=True):
+                l, r = st.columns([2.6, 1.4])
+                with l:
+                    st.markdown(f"**{escape(entry.decision)}**")
+                    st.write(entry.reason)
+                with r:
+                    st.caption(f"Reviewer: {entry.reviewer}")
+                    st.caption(format_sg_time(entry.reviewed_at, include_seconds=True))
+        st.caption("Reviewer names are self-entered, not verified. A flagged AI review does not automatically trigger escalation.")

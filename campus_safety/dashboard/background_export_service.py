@@ -50,3 +50,16 @@ class BackgroundExportService:
         if text.lstrip().startswith(("=", "+", "-", "@")) or text.startswith(("\t", "\r", "\n")):
             return "'" + text
         return text
+    
+    @classmethod
+    def _render_csv(cls, records: list[dict[str, Any]]) -> bytes:
+        if not records:
+            raise ValueError("There are no incidents to export")
+        extra_fields = sorted({key for row in records for key in row} - set(SCHEMA_FIELDS))
+        fields = list(SCHEMA_FIELDS) + extra_fields
+        text = StringIO(newline="")
+        writer = csv.DictWriter(text, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        for record in records:
+            writer.writerow({key: cls._csv_cell(record.get(key)) for key in fields})
+        return text.getvalue().encode("utf-8-sig")

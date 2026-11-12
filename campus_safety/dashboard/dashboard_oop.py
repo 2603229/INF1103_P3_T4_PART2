@@ -35,3 +35,17 @@ from dashboard_extensions import (
     resolve_evidence_image, safe_html, text,
     demo_records_present, demo_storage_configured,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+NAVIGATION = ("Overview", "Incidents", "Insights", "Data & backups")
+SORT_OPTIONS = (
+    "Highest risk first", "Newest first", "Oldest first",
+    "Lowest risk first", "Location A–Z",
+)
+
+st.set_page_config(
+    page_title="Campus Safety | Operations",
+    page_icon=":material/shield:",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)

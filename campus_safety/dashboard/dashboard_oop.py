@@ -314,3 +314,32 @@ class IncidentDashboard:
                 'No Gemini calls are made by this dashboard.</p>', unsafe_allow_html=True,
             )
         return page, live
+    
+    def _render_page_body(self, page: str) -> None:
+        try:
+            reports = self._data_manager.load()
+            records = [report.as_dict() for report in reports]
+        except (DataStoreError, InvalidRecord, ValueError, OSError) as exc:
+            st.error(f"Incident database unavailable: {exc}", icon=None)
+            st.info("Check the selected backend, database path, permissions and record integrity. The database was not reset.")
+            return
+
+        # Integration pack never shows seeded records as operational incidents.
+        # An older local database may still contain sample data from UI testing.
+        if demo_records_present(records):
+            st.error(
+                "Sample incidents were detected in the selected database. "
+                "This integration dashboard will not display them as real reports. "
+                "Select the team's actual repository and database path.",
+                icon=None,
+            )
+            return
+
+        if page == "Overview":
+            self._overview_section(records)
+        elif page == "Incidents":
+            self._incident_section(records)
+        elif page == "Insights":
+            self._insights_section(records)
+        else:
+            self._data_section(reports, records)

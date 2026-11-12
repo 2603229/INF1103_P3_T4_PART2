@@ -34,3 +34,19 @@ class BackgroundExportService:
             for report in reports
         ]
         return self._executor.submit(self._render_csv, snapshot)
+    
+    @staticmethod
+    def _csv_cell(value: Any) -> str | int | float:
+        """Render nested fields and guard spreadsheet applications from formula injection."""
+        if value is None:
+            return ""
+        if isinstance(value, (dict, list, tuple)):
+            value = json.dumps(value, ensure_ascii=False, default=str)
+        if isinstance(value, bool):
+            return str(value)
+        if isinstance(value, (int, float)):
+            return value
+        text = str(value)
+        if text.lstrip().startswith(("=", "+", "-", "@")) or text.startswith(("\t", "\r", "\n")):
+            return "'" + text
+        return text

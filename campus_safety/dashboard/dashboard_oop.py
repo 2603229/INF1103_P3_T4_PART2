@@ -208,3 +208,13 @@ def _export_service() -> BackgroundExportService:
 def _live_body(dashboard: "IncidentDashboard", page: str) -> None:
     """Refresh reads without blocking other widgets or requiring a live AI key."""
     dashboard._render_page_body(page)
+
+# ---------------------------------------------------------------------------
+# OOP DASHBOARD -- presentation layer associated with an injected DataManager.
+# ---------------------------------------------------------------------------
+class IncidentDashboard:
+    """Present validated domain records; all mutations delegate to DataManager."""
+
+    def __init__(self, data_manager: DataManager, backend: str = "json") -> None:
+        self._data_manager = data_manager
+        self._backend = backend.upper()

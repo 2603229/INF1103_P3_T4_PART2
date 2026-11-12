@@ -133,3 +133,11 @@ def overview_metrics(reports: Sequence[Mapping[str, Any]]) -> dict[str, int]:
 
 def count_by(reports: Sequence[Mapping[str, Any]], field: str) -> dict[str, int]:
     return dict(Counter(text(row.get(field), "Unspecified") for row in reports).most_common())
+
+def monthly_counts(reports: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    counts = Counter()
+    for report in reports:
+        moment = parse_report_time(report.get("timestamp"))
+        if moment:
+            counts[moment.strftime("%Y-%m")] += 1
+    return dict(sorted(counts.items()))

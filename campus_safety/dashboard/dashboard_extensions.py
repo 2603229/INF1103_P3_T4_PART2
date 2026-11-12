@@ -47,3 +47,9 @@ def format_sg_time(value: Any, include_seconds: bool = False) -> str:
         return text(value, "Unknown time")
     fmt = "%d %b %Y, %I:%M:%S %p" if include_seconds else "%d %b %Y, %I:%M %p"
     return moment.strftime(fmt) + " SGT"
+
+def priority_score(row: Mapping[str, Any]) -> float:
+    try:
+        return float(row.get("priority_score") or 0)
+    except (ValueError, TypeError):
+        return 0.0

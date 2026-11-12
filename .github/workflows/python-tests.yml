@@ -36,10 +36,11 @@ jobs:
           test -f README.md
           test -f requirements.txt
           test -f .gitignore
+          test -f Dockerfile
 
-      # Step 4: Verify Python syntax.
+      # Step 4: Verify Python syntax of every source and test file.
       - name: Check Python syntax
-        run: python -m py_compile main.py
+        run: python -m compileall -q main.py campus_safety tests
 
       # Step 5: Install the project's Python dependencies.
       - name: Install project dependencies
@@ -51,6 +52,31 @@ jobs:
       - name: Run AI Manager unit tests
         run: python -m tests.run_ai_tests
 
-      # Step 7: Confirm that all configured checks passed.
+      # Step 7: Run the complete offline test suite (all managers, workflow, storage).
+      - name: Run full automated test suite
+        run: python -m unittest discover -s tests -t . -v
+
+      # Step 8: Confirm that all configured checks passed.
       - name: Confirmation
         run: echo "All configured CI checks passed successfully!"
+
+  docker:
+    name: Docker Build and Test
+    runs-on: ubuntu-latest
+    needs: basic-checks
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Build the same image an assessor would build from the repository root.
+      - name: Build Docker image
+        run: docker build -t campus-safety .
+
+      # The test suite must pass inside the container (no API key needed).
+      - name: Run tests inside the container
+        run: docker run --rm campus-safety python -m unittest discover -s tests -t . -v
+
+      # Start the real CLI in the container and exit via menu option 6.
+      - name: Smoke-test the CLI inside the container
+        run: printf '6\n' | docker run -i --rm campus-safety | grep "Goodbye"

@@ -16,3 +16,11 @@ from typing import Any, Mapping, Sequence
 
 from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.domain.schema import SCHEMA_FIELDS
+
+class BackgroundExportService:
+    """Own a small executor and asynchronously serialise read-only snapshots."""
+
+    def __init__(self, max_workers: int = 2) -> None:
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_workers, thread_name_prefix="incident-csv"
+        )

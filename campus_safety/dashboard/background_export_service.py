@@ -24,3 +24,13 @@ class BackgroundExportService:
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers, thread_name_prefix="incident-csv"
         )
+
+    def submit_csv(
+        self, reports: Sequence[HazardReport | Mapping[str, Any]]
+    ) -> Future[bytes]:
+        """Create the snapshot before scheduling the worker for thread safety."""
+        snapshot = [
+            deepcopy(report.as_dict() if isinstance(report, HazardReport) else dict(report))
+            for report in reports
+        ]
+        return self._executor.submit(self._render_csv, snapshot)

@@ -874,3 +874,62 @@ class IncidentDashboard:
         _heading("Most frequently reported locations", "Ranked by the number of recorded reports")
         hot = list(count_by(records, "location").items())[:12]
         st.dataframe(pd.DataFrame(hot, columns=["Location", "Reports"]), hide_index=True, width="stretch")
+
+    def _export_section(self, reports: Sequence[HazardReport], records: list[dict[str, Any]]) -> None:
+        _heading("Export incidents", "Prepare a CSV snapshot in a worker thread; keep using the dashboard while it runs")
+        st.caption("Exports include original record fields and persisted audit/review histories. Protect downloaded files appropriately.")
+        if not records:
+            st.info("There are no incidents to export.", icon=None)
+            return
+        scope = st.radio("Export scope", ["All incidents", "Active incidents only"], horizontal=True)
+        selected = reports if scope == "All incidents" else [
+            r for r in reports if r.status in {"Pending Review", "In Progress"}
+        ]
+        future = st.session_state.get("cs_export_future")
+        busy = future is not None and not future.done()
+        col_p, col_c = st.columns([2, 1], vertical_alignment="bottom")
+        with col_p:
+            if st.button("Prepare CSV in background", type="primary", disabled=busy or not selected,
+                         key="cs_prepare_export", width="stretch"):
+                st.session_state.pop("cs_export_bytes", None)
+                st.session_state["cs_export_future"] = _export_service().submit_csv(selected)
+                st.session_state["cs_export_scope"] = scope
+                st.rerun()
+        with col_c:
+            if st.button("Check export status", key="cs_check_export", width="stretch"):
+                st.rerun()
+        future = st.session_state.get("cs_export_future")
+        if future is not None:
+            if not future.done():
+                st.info("The CSV is being prepared in the background. The dashboard remains available.", icon=None)
+            else:
+                try:
+                    st.session_state["cs_export_bytes"] = future.result()
+                except (ValueError, TypeError, OSError) as exc:
+                    st.error(f"CSV preparation failed: {exc}", icon=None)
+                finally:
+                    st.session_state.pop("cs_export_future", None)
+        content = st.session_state.get("cs_export_bytes")
+        if content:
+            prepared_scope = st.session_state.get("cs_export_scope", "Previous export")
+            st.success(f"CSV export is ready ({prepared_scope.lower()}).", icon=None)
+            st.download_button(
+                "Download CSV", data=content,
+                file_name=f"campus_incidents_{datetime.now():%Y%m%d_%H%M%S}.csv",
+                mime="text/csv", key="cs_download_csv", width="stretch",
+            )
+        with st.expander("Legacy TXT export"):
+            st.caption("The prototype DataManager already supports TXT export to a local file.")
+            if st.button("Generate TXT report", key="cs_txt_generate"):
+                from tempfile import TemporaryDirectory
+                try:
+                    with TemporaryDirectory(prefix="campus-export-") as directory:
+                        path = self._data_manager.export_txt(Path(directory) / "report.txt")
+                        st.session_state["cs_txt_bytes"] = path.read_bytes()
+                    st.success("TXT report generated.", icon=None)
+                except (DataStoreError, OSError, InvalidRecord) as exc:
+                    st.error(f"TXT export failed: {exc}", icon=None)
+            if st.session_state.get("cs_txt_bytes"):
+                st.download_button("Download TXT", st.session_state["cs_txt_bytes"],
+                                   file_name="campus_incidents.txt", mime="text/plain",
+                                   key="cs_download_txt")

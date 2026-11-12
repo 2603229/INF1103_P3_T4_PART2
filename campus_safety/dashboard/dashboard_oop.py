@@ -343,3 +343,21 @@ class IncidentDashboard:
             self._insights_section(records)
         else:
             self._data_section(reports, records)
+
+    def _metric_cards(self, records: Sequence[Mapping[str, Any]]) -> None:
+        values = overview_metrics(records)
+        config = (
+            ("Total incidents", "total", "All historical records", "blue"),
+            ("Active cases", "active", "Pending or in progress", "teal"),
+            ("High-priority active", "high_priority", "Attention recommended", "rose"),
+            ("Resolved / closed", "resolved", "Completed cases", "amber"),
+        )
+        for col, (label, key, note, tone) in zip(st.columns(4), config):
+            with col:
+                st.markdown(
+                    f'<div class="cs-metric cs-metric-tone-{tone}">'
+                    f'<div class="cs-metric-label">{escape(label)}</div>'
+                    f'<div class="cs-metric-value">{values[key]}</div>'
+                    f'<div class="cs-metric-note">{escape(note)}</div></div>',
+                    unsafe_allow_html=True,
+                )

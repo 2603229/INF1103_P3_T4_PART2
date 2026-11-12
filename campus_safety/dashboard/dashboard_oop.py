@@ -1,12 +1,12 @@
 """Campus Safety Operations Console -- Streamlit OOP management dashboard.
 
-Run: python -m streamlit run dashboard_oop.py
+Run (from the project root): python -m streamlit run campus_safety/dashboard/dashboard_oop.py
 
 This module only handles presentation and user interaction. The uploaded
 DataManager and domain classes remain the authorities for CRUD, validation,
 status audit entries and saved AI reviews. New presentation-only capabilities
 live in dashboard_extensions.py; the new asynchronous CSV service lives in
-campus_safety/services/background_export_service.py.
+campus_safety/dashboard/background_export_service.py.
 """
 from __future__ import annotations
 
@@ -35,7 +35,8 @@ from campus_safety.dashboard.dashboard_extensions import (
     demo_records_present, demo_storage_configured,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+# campus_safety/dashboard/dashboard_oop.py -> project root (where the CLI saves uploads/).
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 NAVIGATION = ("Overview", "Incidents", "Insights", "Data & backups")
 SORT_OPTIONS = (
     "Highest risk first", "Newest first", "Oldest first",
@@ -984,6 +985,14 @@ class IncidentDashboard:
 # ---------------------------------------------------------------------------
 def incident_dashboard() -> None:
     """Construct the UI against the existing manager, handling startup failures."""
+    # Read the same .env as the CLI so both use the same backend and database.
+    # Optional: without python-dotenv, terminal environment variables still apply.
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        pass
+    else:
+        load_dotenv(PROJECT_ROOT / ".env")
     backend = os.getenv("HAZARD_STORAGE_BACKEND", "json").strip().lower()
     if demo_storage_configured(backend, os.environ):
         st.markdown(STYLE, unsafe_allow_html=True)

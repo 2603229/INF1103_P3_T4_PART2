@@ -16,9 +16,13 @@ IO Manager Summary:
 from __future__ import annotations
 from pathlib import Path
 from typing import Callable
-from models import Decision, HazardReport
-from INF1103_P3_T4_PART2.campus_safety.io_manager.validators import InputValidator
-from INF1103_P3_T4_PART2.campus_safety.io_manager.media import MediaHandler
+from typing import Any
+from campus_safety.domain.decision import Decision
+from campus_safety.domain.facility_summary_report import FacilitySummaryReport
+from campus_safety.domain.hazard_report import HazardReport
+from campus_safety.domain.schema import VALID_CATEGORIES, VALID_SEVERITIES, VALID_STATUSES
+from campus_safety.io_manager.validators import InputValidator
+from campus_safety.io_manager.media import MediaHandler
 
 """IO Manager: CLI interaction and presentation, isolated from domain logic."""
 
@@ -40,6 +44,9 @@ class IOManager:
         # Resolve and store the base directory path (defaults to current working directory) for safe file operations
         self._base_dir = Path(base_dir or Path.cwd()).resolve()
 
+        # Composition: IOManager creates and owns its MediaHandler for image attachments
+        self._media_handler = MediaHandler(read, write, self._base_dir)
+
     # Print user-facing CLI text through the configured output callback.
     def display_message(self, message: str) -> None:
         # Route all outgoing text messages through the injected write callable
@@ -53,12 +60,14 @@ class IOManager:
                              "1. Submit New Hazard Report\n"
                              "2. View All Logged Incidents\n"
                              "3. View Top 5 Most Frequent Hazards\n"
-                             "4. Exit")
+                             "4. Search and Filter Incidents\n"
+                             "5. View Facilities Summary Report\n"
+                             "6. Exit")
         while True:
-            choice = self._read("Select an option (1-4): ").strip()
-            if choice in ("1", "2", "3", "4"):
+            choice = self._read("Select an option (1-6): ").strip()
+            if choice in ("1", "2", "3", "4", "5", "6"):
                 return choice
-            self.display_message("[Error] Enter a number between 1 and 4.")
+            self.display_message("[Error] Enter a number between 1 and 6.")
 
     # Creates helper methods (_required and confirm) to safely loop through user prompts until valid text or affirmative/negative choices are given.
     def _required(self, prompt: str, check: Callable[[str], bool], error: str) -> str:
@@ -155,6 +164,60 @@ class IOManager:
             return
         for index, (name, count) in enumerate(counts, 1):
             self.display_message(f"{index}. {name} — {count} report(s)")
+
+    # Asks for optional search filters; pressing Enter skips a filter.
+    # Returns keyword arguments matching DataManager.search().
+    def get_search_criteria(self) -> dict[str, Any]:
+        self.display_message("\n--- Search and Filter Incidents (press Enter to skip a filter) ---")
+        location = self._read("Location keyword: ").strip()
+        status = self._choose_optional("Status", VALID_STATUSES)
+        category = self._choose_optional("Category", VALID_CATEGORIES)
+        severity = self._choose_optional("Minimum severity", VALID_SEVERITIES)
+        return {
+            "location_query": location,
+            "status_filter": status,
+            "category_filter": category,
+            "min_severity": VALID_SEVERITIES.index(severity) + 1 if severity else 1,
+        }
+
+    # Shows numbered options and returns the chosen value, or "" when skipped.
+    def _choose_optional(self, label: str, options: tuple[str, ...]) -> str:
+        listing = ", ".join(f"{number}={value}" for number, value in enumerate(options, 1))
+        while True:
+            answer = self._read(f"{label} ({listing}): ").strip()
+            if not answer:
+                return ""
+            if answer.isdigit() and 1 <= int(answer) <= len(options):
+                return options[int(answer) - 1]
+            self.display_message(f"[Error] Enter a number from 1 to {len(options)}, or press Enter to skip.")
+
+    # Displays matching incident dictionaries returned by DataManager.search().
+    def view_search_results(self, results: list[dict[str, Any]]) -> None:
+        if not results:
+            self.display_message("[Notice] No incidents match your filters.")
+            return
+        self.display_message(f"\nMatching Incidents: {len(results)}")
+        for record in results:
+            self.display_message(
+                f"- {record.get('incident_id') or 'N/A'} | {record.get('location') or 'N/A'} | "
+                f"{record.get('category') or 'N/A'} | Severity: {record.get('severity') or 'N/A'} | "
+                f"Priority: {record.get('final_priority') or 'N/A'} | Status: {record.get('status') or 'N/A'}")
+
+    # Displays facilities-management metrics produced by the Logic Manager.
+    def view_facilities_summary(self, summary: FacilitySummaryReport) -> None:
+        self.display_message("\n========== FACILITIES SUMMARY REPORT ==========\n"
+                             f"Active Hazards: {summary.total_active_hazards}\n"
+                             f"Pending Repair: {summary.pending_repair_count}\n"
+                             f"In Progress: {summary.in_progress_count}\n"
+                             f"Urgent (High/Critical Priority): {summary.urgent_hazard_count}\n"
+                             f"Maintenance Backlog Rate: {summary.maintenance_backlog_rate}%")
+        for title, counts in (("By Location", summary.hazards_by_location),
+                              ("By Category", summary.hazards_by_category)):
+            self.display_message(f"\n{title}:")
+            if not counts:
+                self.display_message("  [Notice] No active hazards.")
+            for name, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
+                self.display_message(f"  {name}: {count}")
 
 # # --- Verification / Unit Test Script for Subtask 1.5 ---
 # if __name__ == "__main__":

@@ -1,5 +1,8 @@
 from typing import Any, Optional
 
+from campus_safety.domain.facility_summary_report import FacilitySummaryReport
+
+from .facility_summary_builder import FacilitySummaryBuilder
 from .incident_history import IncidentHistory
 from .priority_evaluator import PriorityEvaluator
 from .severity_sorter import SeveritySorter
@@ -12,10 +15,14 @@ class LogicManager:
         evaluator: Optional[PriorityEvaluator] = None,
         sorter: Optional[SeveritySorter] = None,
         matcher: Optional[TextMatcher] = None,
+        summary_builder: Optional[FacilitySummaryBuilder] = None,
     ) -> None:
         self._evaluator = evaluator if evaluator is not None else PriorityEvaluator()
         self._sorter = sorter if sorter is not None else SeveritySorter()
         self._matcher = matcher
+        self._summary_builder = (
+            summary_builder if summary_builder is not None else FacilitySummaryBuilder()
+        )
 
     #Scoring, evaluation and routing 
     def calculate_score_breakdown(self, record: dict[str, Any]) -> dict[str, int]:
@@ -46,3 +53,10 @@ class LogicManager:
         self, records: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         return self._sorter.sort(records)
+
+    # Facilities reporting
+    def generate_facilities_summary(
+        self, records: list[dict[str, Any]]
+    ) -> FacilitySummaryReport:
+        """Active-hazard workload metrics for facilities management."""
+        return self._summary_builder.build(records)

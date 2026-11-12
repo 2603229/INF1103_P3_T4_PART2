@@ -1,0 +1,21 @@
+# Keep secrets, local data and tooling out of the Docker image.
+.env
+.env.*
+!.env.example
+.git/
+.github/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.vscode/
+.idea/
+hazardreportdb.json
+.incident_id_counter
+*.sqlite3
+*.sqlite3-*
+backups/
+sqlite_backups/
+uploads/
+data/

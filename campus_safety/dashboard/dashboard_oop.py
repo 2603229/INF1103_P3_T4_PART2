@@ -28,4 +28,10 @@ from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.domain.invalid_record import InvalidRecord
 from campus_safety.domain.schema import VALID_STATUSES
 from campus_safety.domain.ai_review_entry import REVIEW_DECISIONS
-from campus_safety.services.background_export_service import BackgroundExportService
+from campus_safety.dashboard.background_export_service import BackgroundExportService
+from dashboard_extensions import (
+    count_by, filter_reports, format_sg_time, monthly_counts,
+    overview_metrics, parse_report_time, priority_score,
+    resolve_evidence_image, safe_html, text,
+    demo_records_present, demo_storage_configured,
+)

@@ -170,6 +170,8 @@ The default file is `hazardreports.sqlite3` (in `HAZARD_DATA_DIR`, or the projec
 
 **Tested by:** `test_data_repositories.py`, which runs the **same** CRUD, persistence, audit-trail, backup/restore and corruption tests against both JSON and SQLite, plus SQLite-specific corrupt-database and migration tests.
 
+A separate `migrate_json_to_sqlite.py` command-line script is not included or required: the import capability is available through `SQLiteIncidentRepository.import_records()`. Switching storage backends does not automatically migrate records.
+
 ### 7.2 📜 Incident Status Audit Trail
 
 Every new incident starts with a creation entry (`Created → Pending Review`). Each later status change records the incident ID, timezone-aware timestamp, previous status, new status and reason. An unchanged status adds no entry, and inconsistent histories are rejected. Implemented in `IncidentAuditEntry`, `HazardReport.change_status()` / `status_history()` and `DataManager.update_status()` / `status_history()`. This is an application-level history, **not** a tamper-proof security log.
@@ -252,7 +254,7 @@ Never commit `.env`, share your key or show it in screenshots. Changing the back
 All tests run offline using stubs, mocks and temporary databases; no Gemini key or network access is required.
 
 ```powershell
-python -m unittest discover -s tests -t . -v      # everything (182 tests)
+python -m unittest discover -s tests -t . -v      # 182 unittest tests
 python -m tests.run_ai_tests                      # formatted AI Manager report
 ```
 
@@ -274,6 +276,8 @@ python -m tests.run_ai_tests                      # formatted AI Manager report
 | `test_facilities_workflow_integration.py` | 1 | Search combined with summary |
 | `test_facility_summary_domain.py` | 2 | `FacilitySummaryReport` backlog rate |
 | **Total** | **182** | |
+
+**Note about `tests/test_io_manager.py`:** this file contains three separate `pytest`-style test functions. They are stored under `tests/`, but the `unittest` discovery command above does **not** collect those functions, so they are **not included in the 182-test total**. If you want to run them separately, install `pytest` in your development environment and run `python -m pytest tests/test_io_manager.py -v`, or convert them to `unittest.TestCase` methods. `pytest` is not currently listed in `requirements.txt`.
 
 Log messages such as `simulated timeout`, `offline` and `Malformed AI JSON` during the AI tests are expected; they come from deliberate failure tests.
 
@@ -297,26 +301,50 @@ A missing database file is not an error: it is treated as an empty database and 
 
 ## 11. 🗂️ Project structure
 
+The following is the **actual source and test layout** in this project version. Generated databases, `.env`, uploads and Python cache files are intentionally omitted.
+
 ```text
 INF1103_P3_T4_PART2/
+├── .github/
+│   └── workflows/
+│       └── python-tests.yml
 ├── campus_safety/
-│   ├── application.py            # CampusSafetyApplication: coordinates the four managers
-│   ├── domain/                   # HazardReport, Decision, FacilitySummaryReport, audit/review entries, schema, errors
-│   ├── io_manager/               # IOManager, InputValidator, MediaHandler
-│   ├── ai_manager/               # AIManager, AssessmentProvider, GeminiAssessor, prompt and image helpers
-│   ├── logic_manager/            # LogicManager, rules, scorers, matchers, router, history, summary builder
-│   ├── data_manager/             # DataManager, IncidentRepository, JSON and SQLite, exporter, factory
-│   └── dashboard/                # Streamlit IncidentDashboard, UI helpers, BackgroundExportService
-├── tests/                        # 182 offline unittest tests (+ ai_manager_test/ and run_ai_tests.py)
-├── test_io_manager.py            # IO Manager author's original pytest-style checks
-├── .github/workflows/python-tests.yml
+│   ├── __init__.py
+│   ├── application.py                 # Coordinates IO → AI → Logic → Data
+│   ├── domain/                        # HazardReport, Decision, schema and audit/review entities
+│   ├── io_manager/                    # IOManager, input validation and media handling
+│   ├── ai_manager/                    # AI providers, assessment, Gemini prompt and image helpers
+│   ├── logic_manager/                 # Scorers, priority rules, routing and facilities summary
+│   ├── data_manager/                  # JSON/SQLite repositories, storage, export and factory
+│   └── dashboard/
+│       ├── dashboard_oop.py           # Streamlit management dashboard
+│       ├── dashboard_extensions.py    # Dashboard presentation helpers
+│       ├── background_export_service.py
+│       ├── README_INTEGRATION.md      # Dashboard's earlier integration notes
+│       └── optional_theme/
+├── tests/
+│   ├── __init__.py
+│   ├── ai_manager_test/               # AI Manager unit tests and stub providers
+│   ├── run_ai_tests.py                # Formatted AI test runner
+│   ├── test_application_workflow.py
+│   ├── test_data_repositories.py
+│   ├── test_hazard_report_domain.py
+│   ├── test_io_manager.py            # Three pytest-style checks (separate from 182 unittest tests)
+│   ├── test_io_manager_cli.py
+│   ├── test_logic_manager_rules.py
+│   ├── test_facilities_data_manager_search.py
+│   ├── test_facilities_logic_manager_summary.py
+│   ├── test_facilities_workflow_integration.py
+│   └── test_facility_summary_domain.py
+├── main.py                            # CLI entry point
 ├── Dockerfile
 ├── .dockerignore
-├── .env.example                  # Safe blank configuration template
-├── main.py                       # Entry point
+├── .gitignore
+├── .env.example                       # Configuration template; contains no real credentials
 ├── requirements.txt
 └── README.md
 ```
+
 
 ## 12. 🧱 OOP implementation guide
 

@@ -1,0 +1,10 @@
+# Streamlit light mode: improves native input, selectbox, table and chart contrast.
+# This does not change application business logic or repository configuration.
+[theme]
+base = "light"
+primaryColor = "#176B9C"
+backgroundColor = "#F5F8FC"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#17324D"
+borderColor = "#CBD9E6"
+font = "sans serif"

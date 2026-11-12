@@ -168,6 +168,108 @@ h1, h2, h3 {font-family:'Manrope',sans-serif;letter-spacing:-0.03em;}
   .cs-metric-value {font-size:1.75rem;}
   .cs-table th,.cs-table td {padding:0.62rem 0.7rem;}
 }
+/* --------------------------------------------------------------------------
+   Accessibility / contrast polish: keep native controls and charts readable.
+   These rules affect presentation only, not incident data or manager logic.
+   -------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+  --cs-bg: #F5F8FC;
+  --cs-ink: #17324D;
+  --cs-muted: #526579;
+  --cs-edge: #CBD9E6;
+  --cs-accent: #176B9C;
+}
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"] {
+  background: var(--cs-bg) !important;
+  color: var(--cs-ink) !important;
+}
+[data-testid="stHeader"] {
+  background: rgba(245,248,252,0.97) !important;
+}
+[data-testid="stHeader"] button {color: #17324D !important;}
+[data-testid="stToolbar"] {color: #17324D !important;}
+[data-testid="stMain"] p,
+[data-testid="stMain"] [data-testid="stMarkdownContainer"] p {
+  color: #263C52;
+}
+[data-testid="stMain"] [data-testid="stCaptionContainer"],
+[data-testid="stMain"] small {color: #556A80 !important;}
+.cs-title, .cs-section {color: #17324D !important;}
+.cs-subtitle, .cs-caption, .cs-meta, .cs-metric-note, .cs-small-note {color: #51677D !important;}
+.cs-metric {background: #FFF; border: 1px solid #CEDAE6; box-shadow: 0 2px 10px rgba(29,57,81,0.06);}
+.cs-metric-label, .cs-fieldlabel {color: #52667D !important;}
+.cs-metric-value, .cs-fieldvalue {color: #17324D !important;}
+.cs-inlinebox {background: #FFF; border-color: #D1DEE9;}
+.cs-table-wrap {background: #FFF !important; border-color: #CEDAE6;}
+.cs-table th {
+  background: #E9F1F8 !important;
+  color: #17324D !important;
+  border-bottom: 1px solid #CBD9E6;
+}
+.cs-table td {background: #FFF !important; color: #243B53 !important;}
+.cs-table td .cs-small {color: #526579 !important;}
+.cs-table tr:hover td {background: #F1F7FC !important;}
+.cs-table .cs-id {color: #126391 !important;}
+.cs-table .cs-loc {color: #17324D !important;}
+[data-testid="stMain"] [data-testid="stButton"] button[kind="secondary"],
+[data-testid="stMain"] [data-testid="stBaseButton-secondary"] {
+  background: #EFF6FC !important;
+  border: 1px solid #B8CFDF !important;
+  color: #17466A !important;
+}
+[data-testid="stMain"] [data-testid="stButton"] button[kind="secondary"]:hover,
+[data-testid="stMain"] [data-testid="stBaseButton-secondary"]:hover {
+  background: #DCECF7 !important;
+  border-color: #176B9C !important;
+  color: #17324D !important;
+}
+[data-testid="stMain"] [data-testid="stButton"] button[kind="primary"],
+[data-testid="stMain"] [data-testid="stFormSubmitButton"] button[kind="primary"] {
+  background: #176B9C !important;
+  border-color: #176B9C !important;
+  color: #FFF !important;
+}
+[data-testid="stMain"] [data-testid="stButton"] button[kind="primary"]:hover,
+[data-testid="stMain"] [data-testid="stFormSubmitButton"] button[kind="primary"]:hover {
+  background: #10557D !important;
+  border-color: #10557D !important;
+}
+[data-testid="stMain"] [data-testid="stTextInput"] input,
+[data-testid="stMain"] [data-testid="stTextArea"] textarea,
+[data-testid="stMain"] [data-baseweb="select"] > div,
+[data-testid="stMain"] [data-testid="stDateInput"] input {
+  background: #FFF !important;
+  color: #17324D !important;
+  border-color: #AFC3D5 !important;
+}
+[data-testid="stMain"] input::placeholder,
+[data-testid="stMain"] textarea::placeholder {color: #60768A !important; opacity: 1;}
+[data-testid="stMain"] [data-testid="stTabs"] button {color: #425D75 !important;}
+[data-testid="stMain"] [data-testid="stTabs"] button[aria-selected="true"] {
+  color: #176B9C !important;
+  font-weight: 750;
+}
+[data-testid="stMain"] [data-testid="stDataFrame"],
+[data-testid="stMain"] [data-testid="stVegaLiteChart"] {
+  background: #FFF !important;
+  border: 1px solid #CEDAE6;
+  border-radius: 10px;
+}
+/* Sidebar remains intentionally navy, with readable white text. */
+[data-testid="stSidebar"] [data-testid="stButton"] button[kind="secondary"] {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: #E9F2FA !important;
+}
+[data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"] {
+  background: #2B5678 !important;
+  border-left: 3px solid #4DC2E0 !important;
+  color: #FFF !important;
+}
+
 </style>
 """
 
@@ -796,7 +898,7 @@ class IncidentDashboard:
                 "size": 20,
                 "cornerRadiusTopRight": 7,
                 "cornerRadiusBottomRight": 7,
-                "color": "#4F8FC8",
+                "color": "#267DB5",
             },
             "encoding": {
                 "y": {
@@ -811,10 +913,10 @@ class IncidentDashboard:
                         "labelOverlap": False,
                         "labelLimit": 180,
                         "labelPadding": 9,
-                        "labelColor": "#000000",
-                        "domainColor": "#000000",
+                        "labelColor": "#243B53",
+                        "domainColor": "#9BB0C2",
                         "domainWidth": 1.3,
-                        "tickColor": "#000000",
+                        "tickColor": "#9BB0C2",
                         "tickWidth": 1.2,
                     },
                 },
@@ -826,14 +928,14 @@ class IncidentDashboard:
                         "title": None,
                         "tickMinStep": 1,
                         "tickCount": 5,
-                        "labelColor": "#000000",
+                        "labelColor": "#243B53",
                         "labelPadding": 7,
-                        "domainColor": "#000000",
+                        "domainColor": "#9BB0C2",
                         "domainWidth": 1.3,
-                        "tickColor": "#000000",
+                        "tickColor": "#9BB0C2",
                         "tickWidth": 1.2,
                         "grid": True,
-                        "gridColor": "#D9E0E7",
+                        "gridColor": "#DFE8F0",
                         "gridWidth": 1,
                     },
                 },
@@ -842,10 +944,68 @@ class IncidentDashboard:
                     {"field": label, "type": "quantitative", "title": label},
                 ],
             },
+            "background": "#FFFFFF",
             "config": {
-                "view": {"stroke": None},
+                "view": {"stroke": None, "fill": "#FFFFFF"},
                 "axis": {"labelFont": "DM Sans", "labelFontSize": 12},
-                "background": "#F7F9FC",
+                "background": "#FFFFFF",
+            },
+        }
+        st.vega_lite_chart(chart_data, spec, width="stretch", theme=None)
+
+    def _monthly_trend_chart(self, monthly: Mapping[str, int]) -> None:
+        """Render monthly counts using a theme-independent, high-contrast chart.
+
+        A line with visible markers stays meaningful even when only one month
+        has been reported, unlike a default line chart with one data point.
+        """
+        if not monthly:
+            st.caption("No parseable report timestamps available.")
+            return
+
+        chart_data = pd.DataFrame(
+            [(month, count) for month, count in sorted(monthly.items())],
+            columns=["Month", "Reports"],
+        )
+        chart_data["Reports"] = pd.to_numeric(chart_data["Reports"], errors="coerce").fillna(0)
+        spec = {
+            "background": "#FFFFFF",
+            "height": 260,
+            "mark": {
+                "type": "line",
+                "color": "#267DB5",
+                "strokeWidth": 3,
+                "point": {"filled": True, "fill": "#267DB5", "size": 95},
+            },
+            "encoding": {
+                "x": {
+                    "field": "Month", "type": "ordinal",
+                    "sort": "ascending",
+                    "axis": {
+                        "title": None, "labelAngle": 0,
+                        "labelColor": "#243B53", "labelFontSize": 12,
+                        "labelLimit": 110,
+                        "domainColor": "#9BB0C2", "tickColor": "#9BB0C2",
+                    },
+                },
+                "y": {
+                    "field": "Reports", "type": "quantitative",
+                    "scale": {"zero": True, "nice": True},
+                    "axis": {
+                        "title": "Reports", "tickMinStep": 1,
+                        "labelColor": "#243B53", "titleColor": "#243B53",
+                        "domainColor": "#9BB0C2", "tickColor": "#9BB0C2",
+                        "grid": True, "gridColor": "#DFE8F0",
+                    },
+                },
+                "tooltip": [
+                    {"field": "Month", "type": "ordinal", "title": "Month"},
+                    {"field": "Reports", "type": "quantitative", "title": "Reports"},
+                ],
+            },
+            "config": {
+                "view": {"stroke": None, "fill": "#FFFFFF"},
+                "axis": {"labelFont": "sans-serif", "titleFont": "sans-serif"},
             },
         }
         st.vega_lite_chart(chart_data, spec, width="stretch", theme=None)
@@ -870,10 +1030,7 @@ class IncidentDashboard:
         with lower_right:
             _heading("Monthly reporting trend", "Recorded incidents by month (SGT)")
             monthly = monthly_counts(records)
-            if monthly:
-                st.line_chart(pd.DataFrame({"Reports": monthly}), width="stretch", height=265)
-            else:
-                st.caption("No parseable report timestamps available.")
+            self._monthly_trend_chart(monthly)
         _heading("Most frequently reported locations", "Ranked by the number of recorded reports")
         hot = list(count_by(records, "location").items())[:12]
         st.dataframe(pd.DataFrame(hot, columns=["Location", "Reports"]), hide_index=True, width="stretch")

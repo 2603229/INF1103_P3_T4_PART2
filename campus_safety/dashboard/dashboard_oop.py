@@ -269,7 +269,54 @@ h1, h2, h3 {font-family:'Manrope',sans-serif;letter-spacing:-0.03em;}
   border-left: 3px solid #4DC2E0 !important;
   color: #FFF !important;
 }
+/* Open incident workspace button */
+.st-key-cs_overview_open button {
+    background: #176B9C !important;
+    border: 1px solid #176B9C !important;
+    border-radius: 10px !important;
+    min-height: 44px !important;
+    padding: 0.65rem 1.1rem !important;
+}
 
+.st-key-cs_overview_open button,
+.st-key-cs_overview_open button * {
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
+}
+
+.st-key-cs_overview_open button:hover {
+    background: #10557D !important;
+    border-color: #10557D !important;
+}
+/* Primary buttons: readable white text */
+[data-testid="stMain"] button[kind="primary"],
+[data-testid="stMain"] button[data-testid^="stBaseButton-primary"] {
+    background: #176B9C !important;
+    border: 1px solid #176B9C !important;
+    border-radius: 10px !important;
+    min-height: 44px !important;
+    font-weight: 700 !important;
+}
+
+/* Override dark paragraph text inside buttons */
+[data-testid="stMain"] button[kind="primary"] *,
+[data-testid="stMain"] button[data-testid^="stBaseButton-primary"] * {
+    color: #FFFFFF !important;
+    fill: currentColor;
+}
+
+/* Hover */
+[data-testid="stMain"] button[kind="primary"]:hover,
+[data-testid="stMain"] button[data-testid^="stBaseButton-primary"]:hover {
+    background: #10557D !important;
+    border-color: #10557D !important;
+}
+
+/* Keyboard focus */
+[data-testid="stMain"] button:focus-visible {
+    outline: 3px solid #93C5FD !important;
+    outline-offset: 2px;
+}
 </style>
 """
 

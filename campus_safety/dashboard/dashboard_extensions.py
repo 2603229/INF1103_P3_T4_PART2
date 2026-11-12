@@ -164,3 +164,29 @@ def resolve_evidence_image(raw_path: Any, allowed_roots: Sequence[Path]) -> Path
         except OSError:
             continue
     return None
+
+# ---------------------------------------------------------------------------
+# INTEGRATION SAFEGUARDS -- new presentation-side checks; not DataManager logic.
+# ---------------------------------------------------------------------------
+def demo_records_present(records: Sequence[Mapping[str, Any]]) -> bool:
+    """Prevent earlier seeded UI fixtures from being displayed as real incidents."""
+    return any(row.get("demo_fixture") is True for row in records)
+
+
+def demo_storage_configured(backend: str, environ: Mapping[str, str]) -> bool:
+    """Detect old demo storage paths in process environment configuration.
+
+    Test directory marker and generated filename are specific to the old demo
+    bundle; unrelated files are not classified merely for containing 'demo'.
+    """
+    key = {"sqlite": "SQLITE_DB_PATH", "json": "INCIDENTS_DB"}.get(backend)
+    paths = [environ.get("HAZARD_DATA_DIR", "")]
+    if key:
+        paths.append(environ.get(key, ""))
+    for raw in paths:
+        if not raw:
+            continue
+        components = str(raw).strip().replace("\\", "/").casefold().split("/")
+        if "demo_data" in components or any(part.startswith("demo_incidents.") for part in components):
+            return True
+    return False

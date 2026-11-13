@@ -286,6 +286,42 @@ class SQLiteMemoryRepositoryTests(unittest.TestCase):
             self.data.clear()
             self.assertEqual(self.data.load(), [])
 
+    def test_multi_criteria_search_edge_cases(self) -> None:
+            critical_electrical = new_report("Building E Level 2")
+            critical_electrical.attach_assessment(
+                AIAssessment("Exposed wires", "Electrical", "Critical", "Severe",
+                             "Cordon off area")
+            )
+            medium_plumbing = new_report("Building E Level 1")
+            medium_plumbing.attach_assessment(
+                AIAssessment("Leaking tap", "Plumbing", "Medium", "Moderate",
+                             "Repair the tap")
+            )
+            critical_outside = new_report("Library Block B")
+            critical_outside.attach_assessment(
+                AIAssessment("Falling debris", "Electrical", "Critical", "Severe",
+                             "Restrict access")
+            )
+            reports = [critical_electrical, medium_plumbing, critical_outside]
+            for report in reports:
+                self.data.save(report)
+                self.data.update_status(report.incident_id, "In Progress")
+    
+            matches = self.data.search(
+                location_query="  BUILDING E  ",
+                status_filter="In Progress",
+                category_filter="eLeCtRiCaL",
+                min_severity=4,
+            )
+            self.assertEqual([row["incident_id"] for row in matches], ["INCIDENT-001"])
+            self.assertEqual(len(self.data.search(min_severity=1)), 3)
+            self.assertEqual(
+                [row["incident_id"] for row in self.data.search(min_severity=4)],
+                ["INCIDENT-001", "INCIDENT-003"],
+            )
+            with self.assertRaises(InvalidRecord):
+                self.data.search(status_filter="Unknown")
+
 
 class RepositoryFactoryTests(unittest.TestCase):
 

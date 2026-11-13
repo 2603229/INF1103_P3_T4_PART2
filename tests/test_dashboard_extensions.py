@@ -1,11 +1,16 @@
 """Offline tests for the dashboard's presentation helpers (no Streamlit needed)."""
 from __future__ import annotations
 
+import tempfile
 import unittest
 from datetime import date
+from pathlib import Path
+from unittest.mock import patch
 
+from campus_safety.dashboard import dashboard_extensions
 from campus_safety.dashboard.dashboard_extensions import (
     count_by, filter_reports, format_sg_time, monthly_counts, parse_report_time,
+    resolve_evidence_image,
 )
 
 ROWS = [
@@ -88,6 +93,46 @@ class ChartDataTests(unittest.TestCase):
     def test_unreadable_timestamp_is_handled(self) -> None:
         self.assertIsNone(parse_report_time("yesterday"))
         self.assertEqual(format_sg_time(None), "Unknown time")
+
+
+class EvidenceImageTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        self.project = base / "project"
+        (self.project / "uploads").mkdir(parents=True)
+        (self.project / "uploads" / "leak.png").write_bytes(b"fake image bytes")
+        (self.project / "uploads" / "notes.txt").write_text("not an image")
+        self.outside = base / "secret.png"
+        self.outside.write_bytes(b"outside the project")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_relative_upload_path_is_found(self) -> None:
+        found = resolve_evidence_image("uploads/leak.png", [self.project])
+        self.assertEqual(found, (self.project / "uploads" / "leak.png").resolve())
+
+    def test_path_traversal_is_rejected(self) -> None:
+        self.assertIsNone(resolve_evidence_image("../secret.png", [self.project]))
+        self.assertIsNone(resolve_evidence_image("uploads/../../secret.png", [self.project]))
+
+    def test_absolute_path_outside_allowed_roots_is_rejected(self) -> None:
+        self.assertIsNone(resolve_evidence_image(str(self.outside), [self.project]))
+
+    def test_second_allowed_root_is_searched(self) -> None:
+        found = resolve_evidence_image("secret.png", [self.project, self.outside.parent])
+        self.assertEqual(found, self.outside.resolve())
+
+    def test_non_images_missing_files_and_bad_values_are_rejected(self) -> None:
+        for value in ("uploads/notes.txt", "uploads/missing.png", "", None, 42):
+            with self.subTest(value=value):
+                self.assertIsNone(resolve_evidence_image(value, [self.project]))
+
+    def test_oversized_image_is_rejected(self) -> None:
+        with patch.object(dashboard_extensions, "MAX_EVIDENCE_BYTES", 4):
+            self.assertIsNone(resolve_evidence_image("uploads/leak.png", [self.project]))
 
 
 if __name__ == "__main__":

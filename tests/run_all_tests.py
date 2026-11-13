@@ -26,6 +26,7 @@ GROUPS = (
     "Data Manager",
     "Domain & Models",
     "Application & Integration",
+    "Dashboard",
     "Other",
 )
 
@@ -43,6 +44,8 @@ def group_for(test_id: str) -> str:
         return "Domain & Models"
     if "test_application_workflow" in test_id or "test_facilities_workflow_integration" in test_id:
         return "Application & Integration"
+    if "test_dashboard_extensions" in test_id or "test_background_export_service" in test_id:
+        return "Dashboard"
     return "Other"
 
 

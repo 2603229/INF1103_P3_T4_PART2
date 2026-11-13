@@ -254,6 +254,15 @@ class SQLiteRepositoryTests(RepositoryContract, unittest.TestCase):
             target.import_records(source.load())
 
 
+class SQLiteMemoryRepositoryTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.repository = SQLiteIncidentRepository(":memory:")
+        self.data = DataManager(self.repository)
+
+    
+
+
 class RepositoryFactoryTests(unittest.TestCase):
 
     def test_factory_returns_selected_backend(self) -> None:

@@ -157,6 +157,18 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertTrue(any("Could not save" in m for m in io.messages))
         self.assertEqual(self.data.load(), [])
 
+    # 2c. Invalid input stops the workflow before any AI call is made.
+    def test_invalid_input_is_rejected_before_ai_call(self) -> None:
+        io = FakeIO(dict(VALID_INPUT, reporter_contact="alex@gmail.com"))
+        provider = StubProvider(ConstantProvider().assess(HazardReport({})))
+
+        result = self.make_app(io, provider).submit_report()
+
+        self.assertIsNone(result)
+        self.assertEqual(provider.received_reports, [])
+        self.assertTrue(any("Invalid report" in m for m in io.messages))
+        self.assertEqual(self.data.load(), [])
+
     # 3. Provider returning an unvalidated object is also rejected and not saved.
     def test_invalid_ai_result_does_not_save_report(self) -> None:
         result = self.make_app(FakeIO(), StubProvider({"category": "Electrical"})).submit_report()

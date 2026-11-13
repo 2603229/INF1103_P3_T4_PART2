@@ -229,6 +229,17 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertEqual(top[0], ("Electrical", 3))
         self.assertEqual(top[1], ("Plumbing", 2))
 
+    def test_top_hazards_groups_missing_categories_and_respects_limit(self) -> None:
+        rows = [{"category": "Plumbing"}, {}, {"category": "   "}, {"category": None},
+                {"category": "HVAC"}, {"category": "Plumbing"}, {"category": "HVAC"}]
+        for number, fields in enumerate(rows, 1):
+            self.data.save(HazardReport.from_storage({"incident_id": f"INCIDENT-{number:03d}", **fields}))
+        app = self.make_app(FakeIO())
+
+        self.assertEqual(app.top_hazards(), [("Uncategorised", 3), ("Plumbing", 2), ("HVAC", 2)])
+        # equal counts keep the order they were first reported in
+        self.assertEqual(app.top_hazards(limit=2), [("Uncategorised", 3), ("Plumbing", 2)])
+
     def test_top_hazards_empty_database(self) -> None:
         self.assertEqual(self.make_app(FakeIO()).top_hazards(), [])
 

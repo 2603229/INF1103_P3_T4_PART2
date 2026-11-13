@@ -263,6 +263,29 @@ class SQLiteMemoryRepositoryTests(unittest.TestCase):
     def tearDown(self) -> None:
             self.repository.close()
 
+    def test_crud_and_audit_trail(self) -> None:
+            first, second = new_report(), new_report("Library")
+            self.data.save(first)
+            self.data.save(second)
+    
+            self.assertEqual(first.incident_id, "INCIDENT-001")
+            self.assertEqual(self.data.get_by_id(first.incident_id).location,
+                             "Building E Level 2")
+            self.assertTrue(self.data.update_status(
+                first.incident_id, "In Progress", "Technician assigned"
+            ))
+            history = self.data.status_history(first.incident_id)
+            self.assertEqual(
+                [(entry.previous_status, entry.new_status) for entry in history],
+                [(None, "Pending Review"), ("Pending Review", "In Progress")],
+            )
+            self.assertEqual(history[-1].reason, "Technician assigned")
+    
+            self.assertTrue(self.data.delete(second.incident_id))
+            self.assertIsNone(self.data.get_by_id(second.incident_id))
+            self.data.clear()
+            self.assertEqual(self.data.load(), [])
+
 
 class RepositoryFactoryTests(unittest.TestCase):
 

@@ -94,6 +94,13 @@ class BrokenRepository(JsonIncidentRepository):
         raise DataStoreError("simulated corrupt database")
 
 
+class ReadOnlyRepository(JsonIncidentRepository):
+    """Repository that can be read but refuses to save (e.g. disk full or locked file)."""
+
+    def save(self, report):
+        raise DataStoreError("simulated write failure")
+
+
 class ApplicationWorkflowTests(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -137,6 +144,30 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(self.data.load(), [])
         self.assertTrue(any("NOT saved" in m for m in io.messages))
+
+    # 2b. Storage failure while saving is reported instead of crashing.
+    def test_save_failure_is_reported_without_crashing(self) -> None:
+        self.data = DataManager(ReadOnlyRepository(self.base / "incidents.json"))
+        io = FakeIO()
+
+        result = self.make_app(io).submit_report()
+
+        self.assertIsNone(result)
+        self.assertIsNone(io.success_report)
+        self.assertTrue(any("Could not save" in m for m in io.messages))
+        self.assertEqual(self.data.load(), [])
+
+    # 2c. Invalid input stops the workflow before any AI call is made.
+    def test_invalid_input_is_rejected_before_ai_call(self) -> None:
+        io = FakeIO(dict(VALID_INPUT, reporter_contact="alex@gmail.com"))
+        provider = StubProvider(ConstantProvider().assess(HazardReport({})))
+
+        result = self.make_app(io, provider).submit_report()
+
+        self.assertIsNone(result)
+        self.assertEqual(provider.received_reports, [])
+        self.assertTrue(any("Invalid report" in m for m in io.messages))
+        self.assertEqual(self.data.load(), [])
 
     # 3. Provider returning an unvalidated object is also rejected and not saved.
     def test_invalid_ai_result_does_not_save_report(self) -> None:
@@ -197,6 +228,17 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertEqual(len(top), 5)
         self.assertEqual(top[0], ("Electrical", 3))
         self.assertEqual(top[1], ("Plumbing", 2))
+
+    def test_top_hazards_groups_missing_categories_and_respects_limit(self) -> None:
+        rows = [{"category": "Plumbing"}, {}, {"category": "   "}, {"category": None},
+                {"category": "HVAC"}, {"category": "Plumbing"}, {"category": "HVAC"}]
+        for number, fields in enumerate(rows, 1):
+            self.data.save(HazardReport.from_storage({"incident_id": f"INCIDENT-{number:03d}", **fields}))
+        app = self.make_app(FakeIO())
+
+        self.assertEqual(app.top_hazards(), [("Uncategorised", 3), ("Plumbing", 2), ("HVAC", 2)])
+        # equal counts keep the order they were first reported in
+        self.assertEqual(app.top_hazards(limit=2), [("Uncategorised", 3), ("Plumbing", 2)])
 
     def test_top_hazards_empty_database(self) -> None:
         self.assertEqual(self.make_app(FakeIO()).top_hazards(), [])

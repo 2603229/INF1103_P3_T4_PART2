@@ -260,7 +260,8 @@ class SQLiteMemoryRepositoryTests(unittest.TestCase):
         self.repository = SQLiteIncidentRepository(":memory:")
         self.data = DataManager(self.repository)
 
-    
+    def tearDown(self) -> None:
+            self.repository.close()
 
 
 class RepositoryFactoryTests(unittest.TestCase):

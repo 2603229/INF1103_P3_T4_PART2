@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 from campus_safety.dashboard import dashboard_extensions
 from campus_safety.dashboard.dashboard_extensions import (
-    count_by, filter_reports, format_sg_time, monthly_counts, parse_report_time,
+    count_by, demo_records_present, demo_storage_configured, filter_reports,
+    format_sg_time, monthly_counts, overview_metrics, parse_report_time,
     resolve_evidence_image,
 )
 
@@ -133,6 +134,39 @@ class EvidenceImageTests(unittest.TestCase):
     def test_oversized_image_is_rejected(self) -> None:
         with patch.object(dashboard_extensions, "MAX_EVIDENCE_BYTES", 4):
             self.assertIsNone(resolve_evidence_image("uploads/leak.png", [self.project]))
+
+
+class SafeguardAndMetricTests(unittest.TestCase):
+
+    def test_demo_records_are_detected(self) -> None:
+        self.assertTrue(demo_records_present([{"incident_id": "A"}, {"demo_fixture": True}]))
+        self.assertFalse(demo_records_present([{"demo_fixture": "yes"}, {}]))
+
+    def test_old_demo_storage_paths_are_detected(self) -> None:
+        self.assertTrue(demo_storage_configured("sqlite", {"SQLITE_DB_PATH": r"C:\x\demo_data\db.sqlite3"}))
+        self.assertTrue(demo_storage_configured("json", {"INCIDENTS_DB": "/tmp/demo_incidents.json"}))
+        self.assertTrue(demo_storage_configured("json", {"HAZARD_DATA_DIR": "/home/u/Demo_Data"}))
+
+    def test_real_paths_are_not_flagged(self) -> None:
+        self.assertFalse(demo_storage_configured("sqlite", {}))
+        self.assertFalse(demo_storage_configured("sqlite", {"HAZARD_DATA_DIR": "/data"}))
+        # 'demo' inside a normal name is fine; only the old bundle's markers count
+        self.assertFalse(demo_storage_configured("json", {"INCIDENTS_DB": "/srv/demonstration.json"}))
+        # the other backend's variable is ignored
+        self.assertFalse(demo_storage_configured("sqlite", {"INCIDENTS_DB": "/x/demo_data/a.json"}))
+
+    def test_overview_metrics(self) -> None:
+        rows = [
+            {"status": "Pending Review", "final_priority": "High", "assessment_source": "Gemini AI"},
+            {"status": "In Progress", "final_priority": "Normal", "assessment_source": "Gemini AI",
+             "ai_review_history": [{"decision": "Accepted"}]},
+            {"status": "Resolved", "final_priority": "Critical"},
+            {},
+        ]
+        self.assertEqual(overview_metrics(rows), {
+            "total": 4, "active": 3, "high_priority": 1, "resolved": 1,
+            "pending_review": 2, "awaiting_ai_review": 1,
+        })
 
 
 if __name__ == "__main__":

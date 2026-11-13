@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import csv
 import io
+import threading
 import unittest
+from unittest.mock import patch
 
 from campus_safety.dashboard.background_export_service import BackgroundExportService
 from campus_safety.domain.hazard_report import HazardReport
@@ -58,6 +60,53 @@ class CsvContentTests(unittest.TestCase):
     def test_empty_export_raises_error(self) -> None:
         with self.assertRaises(ValueError):
             self.export([])
+
+
+class ThreadingTests(unittest.TestCase):
+
+    def test_csv_is_built_on_a_worker_thread(self) -> None:
+        names: list[str] = []
+        original = BackgroundExportService._render_csv
+
+        def spy(records):
+            names.append(threading.current_thread().name)
+            return original(records)
+
+        service = BackgroundExportService()
+        try:
+            with patch.object(BackgroundExportService, "_render_csv", side_effect=spy):
+                service.submit_csv([{"incident_id": "INCIDENT-001"}]).result(timeout=10)
+        finally:
+            service.close()
+        self.assertEqual(len(names), 1)
+        self.assertTrue(names[0].startswith("incident-csv"), names)
+        self.assertNotEqual(names[0], threading.current_thread().name)
+
+    def test_worker_uses_a_snapshot_taken_at_submit_time(self) -> None:
+        release = threading.Event()
+        original = BackgroundExportService._render_csv
+
+        def slow(records):
+            release.wait(timeout=10)  # hold the worker until the caller has changed its data
+            return original(records)
+
+        rows = [{"incident_id": "INCIDENT-001", "location": "Block A"}]
+        service = BackgroundExportService()
+        try:
+            with patch.object(BackgroundExportService, "_render_csv", side_effect=slow):
+                future = service.submit_csv(rows)
+                rows[0]["location"] = "changed after submit"
+                release.set()
+                data = future.result(timeout=10)
+        finally:
+            service.close()
+        self.assertEqual(read_csv(data)[0]["location"], "Block A")
+
+    def test_close_stops_new_work(self) -> None:
+        service = BackgroundExportService()
+        service.close()
+        with self.assertRaises(RuntimeError):
+            service.submit_csv([{"incident_id": "INCIDENT-001"}])
 
 
 if __name__ == "__main__":

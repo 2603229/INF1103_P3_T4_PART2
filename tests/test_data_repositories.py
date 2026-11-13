@@ -5,6 +5,7 @@
 """Cross-backend DataManager / repository tests (JSON and SQLite)."""
 from __future__ import annotations
 
+import csv
 import gc
 import sqlite3
 import tempfile
@@ -157,6 +158,31 @@ class RepositoryContract:
     def test_export_with_no_records_raises(self) -> None:
         with self.assertRaises(DataStoreError):
             self.data.export_csv(self.path.parent / "empty.csv")
+        with self.assertRaises(DataStoreError):
+            self.data.export_txt(self.path.parent / "empty.txt")
+
+    def test_export_csv_sanitizes_formula_cells(self) -> None:
+        self.data.save(HazardReport.from_storage({
+            "incident_id": "INCIDENT-001",
+            "description": "=1+1",
+        }))
+        csv_path = self.data.export_csv(self.path.parent / "formula.csv")
+        with csv_path.open(encoding="utf-8-sig", newline="") as stream:
+            row = next(csv.DictReader(stream))
+        self.assertEqual(row["description"], "'=1+1")
+
+    def test_export_to_non_directory_parent_raises(self) -> None:
+        self.data.save(new_report())
+        blocked_parent = self.path.parent / "not-a-directory"
+        blocked_parent.write_text("blocker", encoding="utf-8")
+
+        for extension, export in (
+            ("csv", self.data.export_csv),
+            ("txt", self.data.export_txt),
+        ):
+            with self.subTest(extension=extension):
+                with self.assertRaises(DataStoreError):
+                    export(blocked_parent / f"incidents.{extension}")
 
 
 class JsonRepositoryTests(RepositoryContract, unittest.TestCase):

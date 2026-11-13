@@ -68,6 +68,13 @@ class TestFacilitiesDataManagerSearch(unittest.TestCase):
         self.assertEqual(len(results), 2)
         self.assertTrue(all("Building E" in r["location"] for r in results))
 
+    def test_search_trims_whitespace_from_location_query(self) -> None:
+        results = self.data_mgr.search(location_query="  Building E  ")
+        self.assertEqual(
+            [report["incident_id"] for report in results],
+            ["INCIDENT-001", "INCIDENT-002"],
+        )
+
     def test_search_by_status_filter(self) -> None:
         results = self.data_mgr.search(status_filter="Pending Review")
         self.assertEqual(len(results), 2)
@@ -77,13 +84,22 @@ class TestFacilitiesDataManagerSearch(unittest.TestCase):
             self.data_mgr.search(status_filter="Unknown")
 
     def test_search_by_category_filter(self) -> None:
-        results = self.data_mgr.search(category_filter="electrical")
+        results = self.data_mgr.search(category_filter="eLeCtRiCaL")
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["incident_id"], "INCIDENT-001")
 
-    def test_search_by_severity_threshold(self) -> None:
-        results = self.data_mgr.search(min_severity=4)
-        self.assertEqual(len(results), 2)
+    def test_search_accepts_min_severity_boundaries(self) -> None:
+        expected_by_threshold = {
+            1: ["INCIDENT-001", "INCIDENT-002", "INCIDENT-003"],
+            4: ["INCIDENT-001", "INCIDENT-003"],
+        }
+        for threshold, expected_ids in expected_by_threshold.items():
+            with self.subTest(min_severity=threshold):
+                results = self.data_mgr.search(min_severity=threshold)
+                self.assertEqual(
+                    [report["incident_id"] for report in results],
+                    expected_ids,
+                )
 
     def test_search_rejects_out_of_range_severity_threshold(self) -> None:
         for min_severity in (0, 5):

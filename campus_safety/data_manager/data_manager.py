@@ -125,6 +125,7 @@ class DataManager:
 
         all_reports = self.load()
         results = []
+        normalized_location_query = location_query.strip().casefold()
         severity_ranks = {
             severity.casefold(): rank
             for rank, severity in enumerate(VALID_SEVERITIES, start=1)
@@ -134,8 +135,8 @@ class DataManager:
             data = report.as_dict()
 
             # Match location keyword (case-insensitive)
-            loc = str(data.get("location", "")).lower()
-            if location_query and location_query.lower() not in loc:
+            loc = str(data.get("location", "")).casefold()
+            if normalized_location_query and normalized_location_query not in loc:
                 continue
 
             # Match status

@@ -39,7 +39,7 @@ class DataManager:
 
     # Find an incident by its stable public identifier; return None if absent.
     def get_by_id(self, incident_id: str) -> HazardReport | None:
-        return next((r for r in self.load() if r.incident_id == incident_id), None)
+        return self._repository.get_by_id(incident_id)
 
     # Return the audited transitions for an incident, or an empty history if missing.
     def status_history(self, incident_id: str) -> list[IncidentAuditEntry]:

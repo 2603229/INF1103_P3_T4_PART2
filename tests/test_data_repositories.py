@@ -10,6 +10,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from campus_safety.ai_manager.ai_assessment import AIAssessment
 from campus_safety.data_manager.data_manager import DataManager
@@ -191,6 +192,17 @@ class SQLiteRepositoryTests(RepositoryContract, unittest.TestCase):
 
     def make_repository(self, path: Path) -> IncidentRepository:
         return SQLiteIncidentRepository(path)
+
+    def test_get_by_id_uses_direct_lookup(self) -> None:
+        repository = SQLiteIncidentRepository(self.path.with_name("direct.sqlite3"))
+        data = DataManager(repository)
+        data.save(new_report())
+
+        with patch.object(repository, "load", side_effect=AssertionError("full scan")):
+            report = data.get_by_id("INCIDENT-001")
+
+        self.assertIsNotNone(report)
+        self.assertEqual(report.incident_id, "INCIDENT-001")
 
     def test_corrupt_sqlite_file_fails_at_startup(self) -> None:
         bad = self.path.with_name("corrupt.sqlite3")

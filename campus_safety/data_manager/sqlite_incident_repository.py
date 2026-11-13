@@ -76,14 +76,19 @@ class SQLiteIncidentRepository(IncidentRepository):
     def _read_all(conn: sqlite3.Connection) -> list[HazardReport]:
         result = []
         for ident, payload in conn.execute("SELECT incident_id, payload FROM incidents ORDER BY rowid"):
-            fields = json.loads(payload)
-            if not isinstance(fields, dict):
-                raise DataStoreError("SQLite incident payload must be an object")
-            report = HazardReport.from_storage(fields)
-            if not ident or report.incident_id != ident:
-                raise DataStoreError("SQLite incident ID does not match stored payload")
-            result.append(report)
+            result.append(SQLiteIncidentRepository._report_from_payload(ident, payload))
         return result
+
+    # Reconstruct a validated report and verify its indexed ID matches the payload.
+    @staticmethod
+    def _report_from_payload(incident_id: str, payload: str) -> HazardReport:
+        fields = json.loads(payload)
+        if not isinstance(fields, dict):
+            raise DataStoreError("SQLite incident payload must be an object")
+        report = HazardReport.from_storage(fields)
+        if not incident_id or report.incident_id != incident_id:
+            raise DataStoreError("SQLite incident ID does not match stored payload")
+        return report
 
     # Validate incident identity/audit history before JSON encoding the SQLite payload.
     @staticmethod
@@ -107,6 +112,18 @@ class SQLiteIncidentRepository(IncidentRepository):
                 return self._read_all(conn)
         except (sqlite3.Error, OSError, ValueError, UnicodeError, InvalidRecord) as exc:
             raise DataStoreError(f"Cannot load SQLite incidents: {exc}") from exc
+
+    # Fetch and validate one row through the indexed primary-key column.
+    def get_by_id(self, incident_id: str) -> HazardReport | None:
+        try:
+            with closing(self._connect()) as conn:
+                row = conn.execute(
+                    "SELECT payload FROM incidents WHERE incident_id = ?",
+                    (incident_id,),
+                ).fetchone()
+            return self._report_from_payload(incident_id, row[0]) if row else None
+        except (sqlite3.Error, OSError, ValueError, UnicodeError, InvalidRecord) as exc:
+            raise DataStoreError(f"Cannot load SQLite incident: {exc}") from exc
 
     # Perform a single immediate transaction to reserve an ID, insert the payload and update metadata.
     # Parameter placeholders prevent SQL injection and preserve special characters.

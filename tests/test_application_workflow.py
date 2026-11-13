@@ -94,6 +94,13 @@ class BrokenRepository(JsonIncidentRepository):
         raise DataStoreError("simulated corrupt database")
 
 
+class ReadOnlyRepository(JsonIncidentRepository):
+    """Repository that can be read but refuses to save (e.g. disk full or locked file)."""
+
+    def save(self, report):
+        raise DataStoreError("simulated write failure")
+
+
 class ApplicationWorkflowTests(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -137,6 +144,18 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(self.data.load(), [])
         self.assertTrue(any("NOT saved" in m for m in io.messages))
+
+    # 2b. Storage failure while saving is reported instead of crashing.
+    def test_save_failure_is_reported_without_crashing(self) -> None:
+        self.data = DataManager(ReadOnlyRepository(self.base / "incidents.json"))
+        io = FakeIO()
+
+        result = self.make_app(io).submit_report()
+
+        self.assertIsNone(result)
+        self.assertIsNone(io.success_report)
+        self.assertTrue(any("Could not save" in m for m in io.messages))
+        self.assertEqual(self.data.load(), [])
 
     # 3. Provider returning an unvalidated object is also rejected and not saved.
     def test_invalid_ai_result_does_not_save_report(self) -> None:

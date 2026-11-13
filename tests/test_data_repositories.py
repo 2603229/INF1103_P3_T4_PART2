@@ -276,6 +276,53 @@ class SQLiteRepositoryTests(RepositoryContract, unittest.TestCase):
         with self.assertRaises(DataStoreError):
             SQLiteIncidentRepository(bad)
 
+    def test_invalid_restore_backup_preserves_live_database(self) -> None:
+        self.data.save(new_report())
+        backup_dir = self.path.parent / "sqlite_backups"
+        backup_dir.mkdir()
+        malformed_backup = backup_dir / "malformed.sqlite3"
+        malformed_backup.write_bytes(b"this is not a database")
+
+        corrupt_backup = backup_dir / "corrupt.sqlite3"
+        connection = sqlite3.connect(corrupt_backup)
+        try:
+            with connection:
+                connection.execute(
+                    "CREATE TABLE incidents (incident_id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
+                )
+                connection.execute(
+                    "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+                )
+                connection.execute(
+                    "INSERT INTO incidents VALUES (?, ?)",
+                    ("INCIDENT-099", "{invalid json"),
+                )
+                connection.execute(
+                    "INSERT INTO metadata VALUES ('last_issued', '99')"
+                )
+        finally:
+            connection.close()
+
+        def database_state() -> tuple[list[tuple[str, str]], str]:
+            connection = sqlite3.connect(self.path)
+            try:
+                incidents = connection.execute(
+                    "SELECT incident_id, payload FROM incidents ORDER BY incident_id"
+                ).fetchall()
+                last_issued = connection.execute(
+                    "SELECT value FROM metadata WHERE key='last_issued'"
+                ).fetchone()[0]
+                return incidents, last_issued
+            finally:
+                connection.close()
+
+        original_state = database_state()
+        for backup in (malformed_backup, corrupt_backup):
+            with self.subTest(backup=backup.name):
+                with self.assertRaises(DataStoreError):
+                    self.data.restore(str(backup))
+                self.assertEqual(database_state(), original_state)
+
     def test_invalid_payload_row_is_rejected(self) -> None:
         self.data.save(new_report())
         connection = sqlite3.connect(self.path)

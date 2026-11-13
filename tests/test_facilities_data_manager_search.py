@@ -3,6 +3,7 @@
 import unittest
 from campus_safety.data_manager.data_manager import DataManager
 from campus_safety.domain.hazard_report import HazardReport
+from campus_safety.domain.invalid_record import InvalidRecord
 
 
 class MockIncidentRepository:
@@ -71,6 +72,10 @@ class TestFacilitiesDataManagerSearch(unittest.TestCase):
         results = self.data_mgr.search(status_filter="Pending Review")
         self.assertEqual(len(results), 2)
 
+    def test_search_rejects_invalid_status_filter(self) -> None:
+        with self.assertRaises(InvalidRecord):
+            self.data_mgr.search(status_filter="Unknown")
+
     def test_search_by_category_filter(self) -> None:
         results = self.data_mgr.search(category_filter="electrical")
         self.assertEqual(len(results), 1)
@@ -79,6 +84,12 @@ class TestFacilitiesDataManagerSearch(unittest.TestCase):
     def test_search_by_severity_threshold(self) -> None:
         results = self.data_mgr.search(min_severity=4)
         self.assertEqual(len(results), 2)
+
+    def test_search_rejects_out_of_range_severity_threshold(self) -> None:
+        for min_severity in (0, 5):
+            with self.subTest(min_severity=min_severity):
+                with self.assertRaises(InvalidRecord):
+                    self.data_mgr.search(min_severity=min_severity)
 
     def test_search_by_ai_severity_threshold(self) -> None:
         reports = [

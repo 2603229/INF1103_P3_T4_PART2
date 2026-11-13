@@ -118,6 +118,11 @@ class DataManager:
         min_severity: int = 1,
     ) -> list[dict[str, Any]]:
         """Filter stored records; severity thresholds rank Low=1 through Critical=4."""
+        if status_filter and status_filter not in VALID_STATUSES:
+            raise InvalidRecord("Invalid incident status filter")
+        if not 1 <= min_severity <= len(VALID_SEVERITIES):
+            raise InvalidRecord("Minimum severity must be between 1 and 4")
+
         all_reports = self.load()
         results = []
         severity_ranks = {

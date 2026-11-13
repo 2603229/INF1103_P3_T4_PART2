@@ -4,7 +4,9 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from campus_safety.dashboard.dashboard_extensions import filter_reports
+from campus_safety.dashboard.dashboard_extensions import (
+    count_by, filter_reports, format_sg_time, monthly_counts, parse_report_time,
+)
 
 ROWS = [
     {"incident_id": "INCIDENT-001", "location": "Library Level 2", "status": "Pending Review",
@@ -62,6 +64,30 @@ class FilterReportsTests(unittest.TestCase):
         result = filter_reports(ROWS, search="library")
         result[0]["location"] = "changed"
         self.assertEqual(ROWS[0]["location"], "Library Level 2")
+
+
+class ChartDataTests(unittest.TestCase):
+
+    def test_count_by_orders_by_frequency_and_labels_missing_values(self) -> None:
+        rows = [{"category": "HVAC"}, {"category": "Electrical"}, {"category": "HVAC"}, {}]
+        counts = count_by(rows, "category")
+        self.assertEqual(counts, {"HVAC": 2, "Electrical": 1, "Unspecified": 1})
+        self.assertEqual(next(iter(counts)), "HVAC")
+
+    def test_monthly_counts_are_sorted_and_skip_bad_timestamps(self) -> None:
+        rows = [{"timestamp": "2026-11-05 10:00:00"}, {"timestamp": "2026-10-01 10:00:00"},
+                {"timestamp": "2026-11-20 10:00:00"}, {"timestamp": "not a date"}, {}]
+        self.assertEqual(monthly_counts(rows), {"2026-10": 1, "2026-11": 2})
+
+    def test_timestamps_are_shown_in_singapore_time(self) -> None:
+        # 23:30 UTC on 31 Oct is already 1 Nov in Singapore (UTC+8)
+        moment = parse_report_time("2026-10-31T23:30:00Z")
+        self.assertEqual((moment.month, moment.day, moment.hour), (11, 1, 7))
+        self.assertEqual(format_sg_time("2026-11-01 09:05:00"), "01 Nov 2026, 09:05 AM SGT")
+
+    def test_unreadable_timestamp_is_handled(self) -> None:
+        self.assertIsNone(parse_report_time("yesterday"))
+        self.assertEqual(format_sg_time(None), "Unknown time")
 
 
 if __name__ == "__main__":

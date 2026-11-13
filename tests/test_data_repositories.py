@@ -322,6 +322,25 @@ class SQLiteMemoryRepositoryTests(unittest.TestCase):
             with self.assertRaises(InvalidRecord):
                 self.data.search(status_filter="Unknown")
 
+    def test_json_migration_into_memory_database(self) -> None:
+            with tempfile.TemporaryDirectory() as directory:
+                source = DataManager(
+                    JsonIncidentRepository(Path(directory) / "legacy.json")
+                )
+                source.save(new_report())
+                source.save(new_report("Library"))
+    
+                imported = self.repository.import_records(source.load(), last_issued=2)
+    
+            self.assertEqual(imported, 2)
+            self.assertEqual(
+                [report.incident_id for report in self.data.load()],
+                ["INCIDENT-001", "INCIDENT-002"],
+            )
+            third = new_report("Atrium")
+            self.data.save(third)
+            self.assertEqual(third.incident_id, "INCIDENT-003")
+
 
 class RepositoryFactoryTests(unittest.TestCase):
 

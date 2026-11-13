@@ -219,6 +219,46 @@ class SQLiteRepositoryTests(RepositoryContract, unittest.TestCase):
     def make_repository(self, path: Path) -> IncidentRepository:
         return SQLiteIncidentRepository(path)
 
+    def test_failed_save_rolls_back_incident_and_id_counter(self) -> None:
+        self.data.save(new_report())
+
+        def database_state() -> tuple[list[tuple[str, str]], str]:
+            connection = sqlite3.connect(self.path)
+            try:
+                incidents = connection.execute(
+                    "SELECT incident_id, payload FROM incidents ORDER BY incident_id"
+                ).fetchall()
+                last_issued = connection.execute(
+                    "SELECT value FROM metadata WHERE key='last_issued'"
+                ).fetchone()[0]
+                return incidents, last_issued
+            finally:
+                connection.close()
+
+        before_incidents, before_counter = database_state()
+        connection = sqlite3.connect(self.path)
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    CREATE TRIGGER fail_counter_update
+                    BEFORE UPDATE OF value ON metadata
+                    WHEN OLD.key = 'last_issued'
+                    BEGIN
+                        SELECT RAISE(ABORT, 'simulated counter update failure');
+                    END
+                    """
+                )
+        finally:
+            connection.close()
+
+        with self.assertRaises(DataStoreError):
+            self.data.save(new_report("Library"))
+
+        after_incidents, after_counter = database_state()
+        self.assertEqual(after_incidents, before_incidents)
+        self.assertEqual(after_counter, before_counter)
+
     def test_get_by_id_uses_direct_lookup(self) -> None:
         repository = SQLiteIncidentRepository(self.path.with_name("direct.sqlite3"))
         data = DataManager(repository)

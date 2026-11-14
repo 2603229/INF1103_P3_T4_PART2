@@ -358,6 +358,26 @@ Log messages such as `simulated timeout`, `offline` and `Malformed AI JSON` duri
 
 A missing database file is not an error: it is treated as an empty database and created on the first save.
 
+### Engineering Report traceability notes
+
+Use the mappings below as the code-to-report source of truth. Keep the 6-page report's UML, data-flow diagram, SQLite description and exception matrix aligned with these methods.
+
+| Report element | Exact code mapping |
+| --- | --- |
+| UML: controller and managers | [`CampusSafetyApplication.create_default()` and `__init__()`](./campus_safety/application.py) construct and hold `IOManager`, `AIManager`, `LogicManager` and `DataManager`. |
+| UML: provider and repository abstractions | [`AIManager.__init__()`](./campus_safety/ai_manager/ai_manager.py) depends on `AssessmentProvider`, implemented by [`GeminiAssessor`](./campus_safety/ai_manager/gemini_assessor.py). [`DataManager.__init__()`](./campus_safety/data_manager/data_manager.py) depends on `IncidentRepository`, implemented by [`JsonIncidentRepository`](./campus_safety/data_manager/json_incident_repository.py) and [`SQLiteIncidentRepository`](./campus_safety/data_manager/sqlite_incident_repository.py). `IOManager.__init__()` creates its `MediaHandler` from [`media.py`](./campus_safety/io_manager/media.py). |
+| UML: logic and export collaborators | [`LogicManager.__init__()`](./campus_safety/logic_manager/logic_manager.py) holds its evaluator, sorter, optional matcher and summary builder; `DataManager.__init__()` creates an `IncidentExporter`. |
+| New-report data flow | [`CampusSafetyApplication.submit_report()`](./campus_safety/application.py) calls `IOManager.get_user_input()` → `CampusSafetyApplication.assess()` → `AIManager.assess()` → `AssessmentProvider.assess()`; then `CampusSafetyApplication.evaluate()` calls `LogicManager.calculate_historical_frequency()`, `check_duplicate()` and `evaluate()`, applies the `Decision` to `HazardReport`, and `DataManager.save()` delegates to `IncidentRepository.save()`. |
+| SQLite schema | [`SQLiteIncidentRepository.__init__()`](./campus_safety/data_manager/sqlite_incident_repository.py) creates `incidents(incident_id TEXT PRIMARY KEY, payload TEXT NOT NULL)` and `metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)`. Each payload serializes one report, including status and AI-review histories; `metadata.last_issued` preserves the ID counter. |
+| SQLite transactions | [`SQLiteIncidentRepository.save()`](./campus_safety/data_manager/sqlite_incident_repository.py) uses `BEGIN IMMEDIATE` to allocate the ID, insert the payload and update the counter atomically. `replace_all()` backs up first, starts an immediate transaction, validates the current rows and concurrent-change snapshot, then applies inserts/updates/deletes and updates the counter. `get_by_id()` queries the `incident_id` primary key directly. |
+
+| Exception scenario | Origin and propagation | Handling / outcome |
+| --- | --- | --- |
+| Gemini API unavailable | [`GeminiAssessor.assess()`](./campus_safety/ai_manager/gemini_assessor.py) reports a missing key immediately; API errors are retried and then become `AssessmentUnavailable`. `AIManager.assess()` propagates provider failures. | [`CampusSafetyApplication.submit_report()`](./campus_safety/application.py) displays the assessment error and does not save the report. |
+| Malformed Gemini JSON | `GeminiAssessor.parse_response()` raises `InvalidRecord` for malformed JSON. During `GeminiAssessor.assess()`, it is treated as a failed attempt; after retries the provider raises `AssessmentUnavailable`. | `CampusSafetyApplication.submit_report()` catches the assessment/validation exception and does not save the report. |
+| Corrupt SQLite database or payload | [`SQLiteIncidentRepository.__init__()` and `load()`](./campus_safety/data_manager/sqlite_incident_repository.py) validate the database and payloads and raise `DataStoreError` on corruption. | [`main.main()`](./main.py) reports startup failure and exits with code 1; at runtime `CampusSafetyApplication.run()` displays a database-unavailable error. |
+| Invalid user input | [`IOManager.get_user_input()`](./campus_safety/io_manager/io_manager.py) uses `InputValidator` to reprompt; [`HazardReport.from_input()`](./campus_safety/domain/hazard_report.py) raises `InvalidRecord` if domain validation fails. | `CampusSafetyApplication.submit_report()` displays an invalid-report error and returns without saving. |
+
 ## 11. 🗂️ Project structure
 
 The following is the **actual source and test layout** in this project version. Generated databases, `.env`, uploads and Python cache files are intentionally omitted.

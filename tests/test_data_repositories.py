@@ -5,11 +5,13 @@
 """Cross-backend DataManager / repository tests (JSON and SQLite)."""
 from __future__ import annotations
 
+import csv
 import gc
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from campus_safety.ai_manager.ai_assessment import AIAssessment
 from campus_safety.data_manager.data_manager import DataManager
@@ -156,6 +158,31 @@ class RepositoryContract:
     def test_export_with_no_records_raises(self) -> None:
         with self.assertRaises(DataStoreError):
             self.data.export_csv(self.path.parent / "empty.csv")
+        with self.assertRaises(DataStoreError):
+            self.data.export_txt(self.path.parent / "empty.txt")
+
+    def test_export_csv_sanitizes_formula_cells(self) -> None:
+        self.data.save(HazardReport.from_storage({
+            "incident_id": "INCIDENT-001",
+            "description": "=1+1",
+        }))
+        csv_path = self.data.export_csv(self.path.parent / "formula.csv")
+        with csv_path.open(encoding="utf-8-sig", newline="") as stream:
+            row = next(csv.DictReader(stream))
+        self.assertEqual(row["description"], "'=1+1")
+
+    def test_export_to_non_directory_parent_raises(self) -> None:
+        self.data.save(new_report())
+        blocked_parent = self.path.parent / "not-a-directory"
+        blocked_parent.write_text("blocker", encoding="utf-8")
+
+        for extension, export in (
+            ("csv", self.data.export_csv),
+            ("txt", self.data.export_txt),
+        ):
+            with self.subTest(extension=extension):
+                with self.assertRaises(DataStoreError):
+                    export(blocked_parent / f"incidents.{extension}")
 
 
 class JsonRepositoryTests(RepositoryContract, unittest.TestCase):
@@ -192,11 +219,109 @@ class SQLiteRepositoryTests(RepositoryContract, unittest.TestCase):
     def make_repository(self, path: Path) -> IncidentRepository:
         return SQLiteIncidentRepository(path)
 
+    def test_failed_save_rolls_back_incident_and_id_counter(self) -> None:
+        self.data.save(new_report())
+
+        def database_state() -> tuple[list[tuple[str, str]], str]:
+            connection = sqlite3.connect(self.path)
+            try:
+                incidents = connection.execute(
+                    "SELECT incident_id, payload FROM incidents ORDER BY incident_id"
+                ).fetchall()
+                last_issued = connection.execute(
+                    "SELECT value FROM metadata WHERE key='last_issued'"
+                ).fetchone()[0]
+                return incidents, last_issued
+            finally:
+                connection.close()
+
+        before_incidents, before_counter = database_state()
+        connection = sqlite3.connect(self.path)
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    CREATE TRIGGER fail_counter_update
+                    BEFORE UPDATE OF value ON metadata
+                    WHEN OLD.key = 'last_issued'
+                    BEGIN
+                        SELECT RAISE(ABORT, 'simulated counter update failure');
+                    END
+                    """
+                )
+        finally:
+            connection.close()
+
+        with self.assertRaises(DataStoreError):
+            self.data.save(new_report("Library"))
+
+        after_incidents, after_counter = database_state()
+        self.assertEqual(after_incidents, before_incidents)
+        self.assertEqual(after_counter, before_counter)
+
+    def test_get_by_id_uses_direct_lookup(self) -> None:
+        repository = SQLiteIncidentRepository(self.path.with_name("direct.sqlite3"))
+        data = DataManager(repository)
+        data.save(new_report())
+
+        with patch.object(repository, "load", side_effect=AssertionError("full scan")):
+            report = data.get_by_id("INCIDENT-001")
+
+        self.assertIsNotNone(report)
+        self.assertEqual(report.incident_id, "INCIDENT-001")
+
     def test_corrupt_sqlite_file_fails_at_startup(self) -> None:
         bad = self.path.with_name("corrupt.sqlite3")
         bad.write_bytes(b"this is not a database")
         with self.assertRaises(DataStoreError):
             SQLiteIncidentRepository(bad)
+
+    def test_invalid_restore_backup_preserves_live_database(self) -> None:
+        self.data.save(new_report())
+        backup_dir = self.path.parent / "sqlite_backups"
+        backup_dir.mkdir()
+        malformed_backup = backup_dir / "malformed.sqlite3"
+        malformed_backup.write_bytes(b"this is not a database")
+
+        corrupt_backup = backup_dir / "corrupt.sqlite3"
+        connection = sqlite3.connect(corrupt_backup)
+        try:
+            with connection:
+                connection.execute(
+                    "CREATE TABLE incidents (incident_id TEXT PRIMARY KEY, payload TEXT NOT NULL)"
+                )
+                connection.execute(
+                    "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+                )
+                connection.execute(
+                    "INSERT INTO incidents VALUES (?, ?)",
+                    ("INCIDENT-099", "{invalid json"),
+                )
+                connection.execute(
+                    "INSERT INTO metadata VALUES ('last_issued', '99')"
+                )
+        finally:
+            connection.close()
+
+        def database_state() -> tuple[list[tuple[str, str]], str]:
+            connection = sqlite3.connect(self.path)
+            try:
+                incidents = connection.execute(
+                    "SELECT incident_id, payload FROM incidents ORDER BY incident_id"
+                ).fetchall()
+                last_issued = connection.execute(
+                    "SELECT value FROM metadata WHERE key='last_issued'"
+                ).fetchone()[0]
+                return incidents, last_issued
+            finally:
+                connection.close()
+
+        original_state = database_state()
+        for backup in (malformed_backup, corrupt_backup):
+            with self.subTest(backup=backup.name):
+                with self.assertRaises(DataStoreError):
+                    self.data.restore(str(backup))
+                self.assertEqual(database_state(), original_state)
 
     def test_invalid_payload_row_is_rejected(self) -> None:
         self.data.save(new_report())
@@ -214,6 +339,94 @@ class SQLiteRepositoryTests(RepositoryContract, unittest.TestCase):
         self.assertEqual(target.import_records(source.load(), last_issued=1), 1)
         with self.assertRaises(DataStoreError):
             target.import_records(source.load())
+
+
+class SQLiteMemoryRepositoryTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.repository = SQLiteIncidentRepository(":memory:")
+        self.data = DataManager(self.repository)
+
+    def tearDown(self) -> None:
+            self.repository.close()
+
+    def test_crud_and_audit_trail(self) -> None:
+            first, second = new_report(), new_report("Library")
+            self.data.save(first)
+            self.data.save(second)
+    
+            self.assertEqual(first.incident_id, "INCIDENT-001")
+            self.assertEqual(self.data.get_by_id(first.incident_id).location,
+                             "Building E Level 2")
+            self.assertTrue(self.data.update_status(
+                first.incident_id, "In Progress", "Technician assigned"
+            ))
+            history = self.data.status_history(first.incident_id)
+            self.assertEqual(
+                [(entry.previous_status, entry.new_status) for entry in history],
+                [(None, "Pending Review"), ("Pending Review", "In Progress")],
+            )
+            self.assertEqual(history[-1].reason, "Technician assigned")
+    
+            self.assertTrue(self.data.delete(second.incident_id))
+            self.assertIsNone(self.data.get_by_id(second.incident_id))
+            self.data.clear()
+            self.assertEqual(self.data.load(), [])
+
+    def test_multi_criteria_search_edge_cases(self) -> None:
+            critical_electrical = new_report("Building E Level 2")
+            critical_electrical.attach_assessment(
+                AIAssessment("Exposed wires", "Electrical", "Critical", "Severe",
+                             "Cordon off area")
+            )
+            medium_plumbing = new_report("Building E Level 1")
+            medium_plumbing.attach_assessment(
+                AIAssessment("Leaking tap", "Plumbing", "Medium", "Moderate",
+                             "Repair the tap")
+            )
+            critical_outside = new_report("Library Block B")
+            critical_outside.attach_assessment(
+                AIAssessment("Falling debris", "Electrical", "Critical", "Severe",
+                             "Restrict access")
+            )
+            reports = [critical_electrical, medium_plumbing, critical_outside]
+            for report in reports:
+                self.data.save(report)
+                self.data.update_status(report.incident_id, "In Progress")
+    
+            matches = self.data.search(
+                location_query="  BUILDING E  ",
+                status_filter="In Progress",
+                category_filter="eLeCtRiCaL",
+                min_severity=4,
+            )
+            self.assertEqual([row["incident_id"] for row in matches], ["INCIDENT-001"])
+            self.assertEqual(len(self.data.search(min_severity=1)), 3)
+            self.assertEqual(
+                [row["incident_id"] for row in self.data.search(min_severity=4)],
+                ["INCIDENT-001", "INCIDENT-003"],
+            )
+            with self.assertRaises(InvalidRecord):
+                self.data.search(status_filter="Unknown")
+
+    def test_json_migration_into_memory_database(self) -> None:
+            with tempfile.TemporaryDirectory() as directory:
+                source = DataManager(
+                    JsonIncidentRepository(Path(directory) / "legacy.json")
+                )
+                source.save(new_report())
+                source.save(new_report("Library"))
+    
+                imported = self.repository.import_records(source.load(), last_issued=2)
+    
+            self.assertEqual(imported, 2)
+            self.assertEqual(
+                [report.incident_id for report in self.data.load()],
+                ["INCIDENT-001", "INCIDENT-002"],
+            )
+            third = new_report("Atrium")
+            self.data.save(third)
+            self.assertEqual(third.incident_id, "INCIDENT-003")
 
 
 class RepositoryFactoryTests(unittest.TestCase):

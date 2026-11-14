@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 from .frequency_scorer import FrequencyScorer
 from .impact_scorer import ImpactScorer
@@ -11,8 +11,8 @@ class ScoreCalculator:
     Combines the individual scorers into a total score.
     """
 
-    def __init__(self) -> None:
-        self._scorers: list[Scorer] = [
+    def __init__(self, scorers: Optional[list[Scorer]] = None) -> None:
+        self._scorers: list[Scorer] = scorers if scorers is not None else [
             SeverityScorer(),
             ImpactScorer(),
             FrequencyScorer(),

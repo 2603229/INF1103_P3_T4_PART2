@@ -19,10 +19,10 @@ Every **new report** follows the four-manager workflow, coordinated by `CampusSa
 | --- | --- |
 | 🆕 New feature | **Facilities Search & Summary Report** — Section 6 |
 | 🚀 Advanced feature | **SQLite database integration (full CRUD)** — Section 7.1 |
-| 🖥️ Additional extensions | Streamlit dashboard, live form previews, saved-field resets and threaded CSV export — Sections 7.4–7.5 |
+| 🖥️ Additional enhancements | **AI Assessment Review & Feedback**, **Incident Status Audit Trail**, Streamlit dashboard, live form previews, field clearing and background CSV export — Sections 7.2–7.5 |
 | 🐳 Docker | `Dockerfile` — Section 8.2 |
 | ⚙️ CI | `.github/workflows/python-tests.yml` — Section 9 |
-| ✅ Tests | 182 offline tests — Section 9 |
+| ✅ Tests | **233 offline `unittest` tests passed**; 51 AI tests passed in a separate overlapping runner — Section 9 |
 
 ## 2. ✨ Main application functions
 
@@ -72,6 +72,18 @@ Integration details handled by `CampusSafetyApplication`:
 - `AssessmentUnavailable`, `InvalidRecord` and `DataStoreError` are shown as user-friendly messages instead of tracebacks (see Section 10).
 
 `main.py` only starts the application. `CampusSafetyApplication.create_default()` loads `.env`, creates each manager and injects them.
+
+### 3.1 End-to-end example: incident submission → dashboard
+
+1. **Start the CLI:** run `python main.py`; the entry point creates `CampusSafetyApplication` and the four managers.
+2. **Report a hazard:** select menu option 1 and enter a fictional reporter, site/location, affected asset, number of people and description; attach a supported image if available. `IOManager` validates the input and creates a `HazardReport`.
+3. **Obtain an AI assessment:** `CampusSafetyApplication` invokes `AIManager`; the `AssessmentProvider` implementation returns a validated `AIAssessment`. If assessment fails, **nothing is saved**.
+4. **Evaluate and confirm:** `LogicManager` checks historical frequency/duplicates, calculates priority and routing, and the CLI displays the results for user confirmation.
+5. **Persist the record:** `DataManager` uses the configured `IncidentRepository` (JSON or SQLite) to store the report and assign its incident ID.
+6. **Monitor and update:** in a separate terminal run the Streamlit dashboard. It reads the same backend through `DataManager`. The user can inspect the incident, add a **status change with a reason** (audit history), or save a **human AI-review decision** (review history); neither review changes the original AI assessment.
+
+**Architecture note:** `IOManager`, `AIManager`, `LogicManager` and `DataManager` are collaborators injected into `CampusSafetyApplication`; the CLI's **Input → Assess → Prioritise → Save** sequence is an execution flow, **not** evidence that managers directly call one another. The dashboard is an independent entry point in `campus_safety/dashboard/dashboard_oop.py` and does not submit new Gemini assessments.
+
 
 ## 4. 🔁 Refactoring from Phase 1
 
@@ -175,13 +187,29 @@ The default file is `hazardreports.sqlite3` (in `HAZARD_DATA_DIR`, or the projec
 
 A separate `migrate_json_to_sqlite.py` command-line script is not included or required: the import capability is available through `SQLiteIncidentRepository.import_records()`. Switching storage backends does not automatically migrate records.
 
-### 7.2 📜 Incident Status Audit Trail
+### 7.2 📜 Incident Status Audit Trail (additional enhancement)
 
-Every new incident starts with a creation entry (`Created → Pending Review`). Each later status change records the incident ID, timezone-aware timestamp, previous status, new status and reason. An unchanged status adds no entry, and inconsistent histories are rejected. Implemented in `IncidentAuditEntry`, `HazardReport.change_status()` / `status_history()` and `DataManager.update_status()` / `status_history()`. This is an application-level history, **not** a tamper-proof security log.
+**Problem solved:** facilities staff need an accountable record of how and why an incident changes from `Pending Review` to `In Progress` or `Resolved`, rather than seeing only its most recent status.
 
-### 7.3 🧑‍💻 AI Assessment Review & Feedback
+**How to use:** open **Streamlit → Incidents → select a case → Manage status**. Choose a new status, inspect the live unsaved preview, enter a reason and select **Save status and record history**. The **Activity history** tab displays the saved transitions.
 
-Staff can record **Accepted**, **Flagged as Incorrect** or **Further Review Requested** against a saved Gemini assessment, with a reviewer name and reason. A review never changes the original AI fields, priority, status or Audit Trail. Implemented in `AIReviewEntry`, `HazardReport.add_ai_review()` and `DataManager.record_ai_review()`. Reviewer names are self-entered and **not authenticated**.
+**Implementation:** every new report starts with a creation entry (`Created → Pending Review`). Later changes create `IncidentAuditEntry` records containing the incident ID, timezone-aware timestamp, previous status, new status and reason. `HazardReport.change_status()` validates transitions; `DataManager.update_status()` persists the updated incident and `status_history()` retrieves the record. Submitting the same status creates **no duplicate entry**. The text field clears **only after a successful status change**; failed/invalid submissions retain entered text.
+
+**Verification:** use an incident in a disposable repository; change `Pending Review → In Progress` with a nonempty reason, reload the case and verify the history entry and new status persist. Try an empty reason and an unchanged status to verify no incorrect audit entry is added. Automated coverage is included in `test_data_repositories.py`, `test_hazard_report_domain.py` and dashboard helper tests.
+
+> **Scope:** this is an application-level activity history, **not** a cryptographically tamper-proof security log.
+
+### 7.3 🧑‍💻 AI Assessment Review & Feedback (additional enhancement)
+
+**Problem solved:** an AI-generated risk assessment may need human confirmation, correction feedback or escalation without deleting the initial assessment or losing review accountability.
+
+**How to use:** open **Streamlit → Incidents → select a case → AI assessment & review**. Choose **Accepted**, **Flagged as Incorrect** or **Further Review Requested**, enter a reviewer name and reason, and select **Save AI review**. The decision is previewed immediately; after a successful save the name/reason fields clear and the decision resets to `Accepted`. The **AI Review History** section shows saved feedback.
+
+**Implementation:** `AIReviewEntry` stores each review decision, reviewer, reason and timestamp; `HazardReport.add_ai_review()` validates it; `DataManager.record_ai_review()` persists it and `ai_review_history()` reads it. Reviews **do not overwrite** Gemini's `risk_summary`, `category`, `severity`, `operational_impact`, `contextual_insights`, assigned priority or incident status.
+
+**Verification:** submit a review for a case with a complete saved AI assessment, reload the case and verify the feedback history persists while the original AI result remains unchanged. Confirm that an empty reason/invalid reviewer name is rejected without clearing valid form input. Automated coverage is included in `test_data_repositories.py` and `test_hazard_report_domain.py`; verify live form behaviour in a browser.
+
+> **Scope:** reviewer names are self-entered, **not authenticated**; the current dashboard is a local educational prototype, not a production approval system.
 
 ### 7.4 🖥️ Streamlit dashboard and threaded CSV export
 
@@ -291,7 +319,7 @@ Never commit `.env`, share your key or show it in screenshots. Changing the back
 
 ### 8.4 🎨 Optional Streamlit theme
 
-The dashboard contains its own `STYLE` CSS in `dashboard_oop.py`; **there is no required `dashboard_style.py` file**. To keep Streamlit's native controls consistent with the light dashboard, you may add `.streamlit/config.toml` in the project root:
+The dashboard contains its own `STYLE` CSS in `dashboard_oop.py`; **there is no required `dashboard_style.py` file**. The supplied project already includes `.streamlit/config.toml` at the repository root to keep Streamlit's native controls consistent with the light dashboard:
 
 ```toml
 [theme]
@@ -304,46 +332,44 @@ borderColor = "#CBD9E6"
 font = "sans serif"
 ```
 
-This file is optional. If you include it, keep it at **`<project root>/.streamlit/config.toml`**, not inside `campus_safety/dashboard/`.
+Streamlit can run without this file, but **keep the included version** for consistent contrast. Its location is **`<project root>/.streamlit/config.toml`**, not inside `campus_safety/dashboard/`.
 
 
 ## 9. ✅ Automated tests and CI
 
-The documented automated suite runs offline using stubs, mocks and temporary databases; no Gemini key or network access is required. **The 182-test count describes the existing baseline**; rerun the suite after updating dashboard code. The live Streamlit preview and clearing behaviour must also be checked manually because the unit-test suite does not establish that the browser UI behaves correctly.
+**Verified against the supplied ZIP on 14 November 2026:** **233/233 `unittest` tests passed** locally (no failures or errors). The **separate AI Manager runner passed 51/51**; its 51 tests are already included within the full 233, so these totals must **not** be added together. Offline tests use stubbed AI responses and temporary repositories and do not require a live Gemini API key.
 
 ```powershell
-python -m py_compile campus_safety/dashboard/dashboard_oop.py  # syntax check
-python -m unittest discover -s tests -t . -v      # 182 unittest tests in the documented baseline
-python -m tests.run_ai_tests                      # formatted AI Manager report
+python -m compileall -q main.py campus_safety tests
+python -m unittest discover -s tests -t . -v    # full suite: 233 tests
+python -m tests.run_all_tests                    # grouped full-suite summary
+python -m tests.run_ai_tests                     # overlapping AI subset: 51 tests
 ```
 
-| Test file | Tests | Covers |
-| --- | --- | --- |
-| `ai_manager_test/test_ai_assessment_validation.py` | 8 | AI field and schema validation |
-| `ai_manager_test/test_ai_manager.py` | 4 | Provider delegation, unvalidated results, substitution |
-| `ai_manager_test/test_assessment_provider.py` | 4 | Abstract provider contract |
-| `ai_manager_test/test_gemini_assessor.py` | 19 | Prompt, JSON parsing, malformed JSON, timeouts, retries, model fallback, images |
-| `ai_manager_test/test_gemini_prompt_builder.py` | 7 | Prompt content and personal-data redaction |
-| `ai_manager_test/test_image_evidence_processor.py` | 9 | Image type, size, corruption and mismatch checks |
-| `test_logic_manager_rules.py` | 29 | Scoring points, multi-condition Critical rule, High/Normal, routing, frequency, duplicates, sorting, OCP/LSP substitution |
-| `test_data_repositories.py` | 40 | JSON **and** SQLite CRUD, persistence, audit trail, AI review, backups, corrupt files, migration, factory |
-| `test_hazard_report_domain.py` | 17 | Input validation, encapsulation, status transitions, AI review rules |
-| `test_io_manager_cli.py` | 14 | Menu, input validation loops, search criteria, result and summary display |
-| `test_application_workflow.py` | 19 | Full IO → AI → Logic → Data workflow, AI failure, cancellation, search/summary, menu, `main()` startup errors |
-| `test_facilities_data_manager_search.py` | 7 | `DataManager.search()` filters |
-| `test_facilities_logic_manager_summary.py` | 2 | Facilities summary metrics |
-| `test_facilities_workflow_integration.py` | 1 | Search combined with summary |
-| `test_facility_summary_domain.py` | 2 | `FacilitySummaryReport` backlog rate |
-| **Total** | **182** | |
+### 9.1 Test coverage in this project version
 
-**Note about `tests/test_io_manager.py`:** this file contains three separate `pytest`-style test functions. They are stored under `tests/`, but the `unittest` discovery command above does **not** collect those functions, so they are **not included in the 182-test total**. If you want to run them separately, install `pytest` in your development environment and run `python -m pytest tests/test_io_manager.py -v`, or convert them to `unittest.TestCase` methods. `pytest` is not currently listed in `requirements.txt`.
+| Area / test module | Tests | Main coverage |
+| --- | ---: | --- |
+| AI Manager (`tests/ai_manager_test/`, six modules) | 51 | Schema validation, provider abstraction, Gemini retries/fallback, prompts and image validation |
+| `test_logic_manager_rules.py` | 29 | Priority rules, severity/impact scoring, history, duplicate matching, OOP substitution |
+| `test_data_repositories.py` | 50 | JSON/SQLite CRUD, status audit, AI review, migrations, persistence, backups and corruption |
+| `test_hazard_report_domain.py` | 17 | Domain validation, incident state changes, AI review rules |
+| `test_io_manager_cli.py` | 14 | CLI, validation loops, search criteria and facilities output |
+| `test_application_workflow.py` | 22 | End-to-end submission, cancellation, failure handling and menu routes |
+| `test_facilities_data_manager_search.py` | 10 | Incident filters and searches |
+| `test_facilities_logic_manager_summary.py` | 2 | Facilities summaries |
+| `test_facilities_workflow_integration.py` | 1 | Integrated facilities search/summary |
+| `test_facility_summary_domain.py` | 2 | Facility summary result validation |
+| `test_incident_exporter.py` | 4 | Exporter behaviour |
+| `test_background_export_service.py` | 9 | Threaded export service and task handling |
+| `test_dashboard_extensions.py` | 22 | Dashboard presentation/helper logic |
+| **Total `unittest` tests** | **233** | **233 passed in this verification** |
 
-Log messages such as `simulated timeout`, `offline` and `Malformed AI JSON` during the AI tests are expected; they come from deliberate failure tests.
+`tests/test_io_manager.py` contains **three separate pytest-style checks**, not collected by `unittest` discovery and therefore **excluded** from the 233-test total. To execute them separately, install `pytest` and run `python -m pytest tests/test_io_manager.py -v`; `pytest` is not listed in the runtime `requirements.txt`.
 
-**Continuous integration** (`.github/workflows/python-tests.yml`) runs on pushes to `main` and `feature/**` branches, and on pull requests to `main`:
+**Browser verification is separate:** the automated dashboard tests primarily cover helper logic and export services. Manually verify Streamlit rendering, live selectbox previews, button contrast and the field-clearing behaviour described in Section 7.5. The local test results above do **not** establish Docker startup or successful GitHub-hosted CI runs.
 
-1. **basic-checks** — verifies required files (including the `Dockerfile`), compiles all Python files, installs requirements, runs the formatted AI test report, checks that the dashboard modules import, and runs the full test suite.
-2. **docker** — builds the image, runs the full test suite inside the container, and starts the CLI in the container to confirm it launches and exits cleanly.
+**CI configuration:** `.github/workflows/python-tests.yml` runs on pushes to `main` and `feature/**`, and pull requests to `main`. The `basic-checks` job checks essential files, compiles Python, installs dependencies, runs AI tests, imports the dashboard and runs the complete `unittest` suite. The `docker` job builds the image, runs the same suite in the container and smoke-tests the CLI using menu option 6. **Review GitHub Actions results separately** before claiming CI/Docker success in the engineering report.
 
 ## 10. ⚠️ Exception handling
 
@@ -404,18 +430,22 @@ INF1103_P3_T4_PART2/
 ├── tests/
 │   ├── __init__.py
 │   ├── ai_manager_test/               # AI Manager unit tests and stub providers
-│   ├── run_ai_tests.py                # Formatted AI test runner
 │   ├── test_application_workflow.py
+│   ├── test_background_export_service.py
+│   ├── test_dashboard_extensions.py
 │   ├── test_data_repositories.py
 │   ├── test_hazard_report_domain.py
-│   ├── test_io_manager.py            # Three pytest-style checks (separate from 182 unittest tests)
+│   ├── test_io_manager.py            # Three pytest checks (not in the 233 unittest tests)
 │   ├── test_io_manager_cli.py
 │   ├── test_logic_manager_rules.py
 │   ├── test_facilities_data_manager_search.py
 │   ├── test_facilities_logic_manager_summary.py
 │   ├── test_facilities_workflow_integration.py
-│   └── test_facility_summary_domain.py
-├── .streamlit/config.toml             # Optional native widget theme (if configured)
+│   ├── test_facility_summary_domain.py
+│   ├── test_incident_exporter.py
+│   ├── run_all_tests.py              # Grouped full-suite results
+│   └── run_ai_tests.py               # Focused AI subset
+├── .streamlit/config.toml             # Included native Streamlit light theme
 ├── main.py                            # CLI entry point
 ├── Dockerfile
 ├── .dockerignore

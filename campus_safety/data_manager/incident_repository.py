@@ -20,6 +20,11 @@ class IncidentRepository(ABC):
     def load(self) -> list[HazardReport]:
         raise NotImplementedError
 
+    # Default lookup keeps existing repositories compatible without requiring a scan-specific override.
+    def get_by_id(self, incident_id: str) -> HazardReport | None:
+        return next((report for report in self.load()
+                     if report.incident_id == incident_id), None)
+
     # Abstract create operation; storage backends allocate/preserve incident identifiers.
     @abstractmethod
     def save(self, report: HazardReport) -> None:

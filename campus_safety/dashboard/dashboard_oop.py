@@ -12,7 +12,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from html import escape
+import json
 import os
+import sqlite3
 from pathlib import Path
 from textwrap import wrap as wrap_text
 from typing import Any, Mapping, Sequence
@@ -161,6 +163,10 @@ h1, h2, h3 {font-family:'Manrope',sans-serif;letter-spacing:-0.03em;}
 .cs-table .cs-id {font-weight:750;color:#1E587E;white-space:nowrap;}
 .cs-table .cs-small {font-size:0.76rem;color:#7C8B9C;white-space:nowrap;}
 .cs-table .cs-loc {font-weight:650;color:#253B52;}
+/* Incident table: allow full locations to wrap without ellipses. */
+.cs-incidents-table .cs-location-cell {min-width:200px;max-width:340px;}
+.cs-incidents-table .cs-loc {display:block;white-space:normal;overflow-wrap:anywhere;}
+.cs-incidents-table .cs-report-time {min-width:150px;white-space:normal;}
 .cs-small-note {color:#7B8D9D;font-size:0.77rem;}
 @media (max-width:900px) {
   [data-testid="stMainBlockContainer"],.block-container {padding-top:4.7rem !important;padding-bottom:2rem !important;}
@@ -583,23 +589,62 @@ class IncidentDashboard:
         )
 
     def _table(self, records: Sequence[Mapping[str, Any]], compact: bool = False) -> None:
-        table = []
-        for r in records:
-            table.append({
-                "Incident ID": text(r.get("incident_id"), ""),
-                "Reported (SGT)": format_sg_time(r.get("timestamp")),
-                "Location": text(r.get("location"), "—"),
-                "Category": text(r.get("category"), "—"),
-                "Severity": text(r.get("severity"), "—"),
-                "Priority": text(r.get("final_priority"), "—"),
-                "Score": priority_score(r),
-                "Status": text(r.get("status"), "Pending Review"),
-            })
-        df = pd.DataFrame(table)
-        # 'content' eliminates the artificial blank grid below short tables.
-        # Long pages retain scrolling inside a bounded table.
-        height = "content" if compact or len(df) <= 10 else 490
-        st.dataframe(df, hide_index=True, width="stretch", height=height)
+        """Display saved incident records as a readable, wrapped HTML table.
+
+        Records are supplied by DataManager.load(), which reads the currently
+        configured repository (SQLite when HAZARD_STORAGE_BACKEND=sqlite).
+        No raw SQL is needed here: this remains the presentation layer.
+
+        The incident workspace shows all columns; the overview shows a concise
+        queue. Long locations wrap instead of being cut off with ellipses.
+        """
+        # Escaping is essential: these values originate from user-submitted data.
+        # Render status and priority with the project's existing safe badge helper.
+        rows: list[str] = []
+        for record in records:
+            incident_id = escape(text(record.get("incident_id"), "—"))
+            location = escape(text(record.get("location"), "—"))
+            reported = escape(format_sg_time(record.get("timestamp")))
+            category = escape(text(record.get("category"), "—"))
+            severity = escape(text(record.get("severity"), "—"))
+            priority = _badge(record.get("final_priority"))
+            status = _badge(record.get("status"))
+            score = escape(f"{priority_score(record):.1f}")
+
+            # Compact mode fits the Overview page without crowding it.
+            if compact:
+                row = (
+                    f'<tr><td class="cs-id">{incident_id}</td>'
+                    f'<td class="cs-location-cell"><span class="cs-loc">{location}</span></td>'
+                    f'<td>{priority}</td><td>{status}</td></tr>'
+                )
+            else:
+                row = (
+                    f'<tr><td class="cs-id">{incident_id}</td>'
+                    f'<td class="cs-report-time">{reported}</td>'
+                    f'<td class="cs-location-cell"><span class="cs-loc">{location}</span></td>'
+                    f'<td>{category}</td><td>{severity}</td>'
+                    f'<td>{priority}</td><td>{score}</td><td>{status}</td></tr>'
+                )
+            rows.append(row)
+
+        # The styled table uses existing project CSS; horizontal scrolling is
+        # available on small screens, while location text itself can wrap.
+        headings = (
+            "<th>Incident ID</th><th>Location</th><th>Priority</th><th>Status</th>"
+            if compact else
+            "<th>Incident ID</th><th>Reported (SGT)</th><th>Location</th>"
+            "<th>Category</th><th>Severity</th><th>Priority</th>"
+            "<th>Score</th><th>Status</th>"
+        )
+        st.markdown(
+            '<div class="cs-table-wrap">'
+            '<table class="cs-table cs-incidents-table">'
+            f'<thead><tr>{headings}</tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody>'
+            '</table></div>',
+            unsafe_allow_html=True,
+        )
 
     def _incident_section(self, records: list[dict[str, Any]]) -> None:
         if not records:
@@ -1285,6 +1330,62 @@ class IncidentDashboard:
             except (DataStoreError, InvalidRecord, OSError, ValueError) as exc:
                 st.error(f"Restore failed: {exc}", icon=None)
 
+    def _sqlite_database_viewer(self) -> None:
+        """Show read-only evidence that incidents exist in the SQLite database.
+
+        This is only a diagnostic display; all production CRUD still goes
+        through DataManager and IncidentRepository as required by OOP design.
+        """
+        if self._backend != "SQLITE":
+            return
+
+        st.subheader("SQLite Database Viewer")
+        st.caption("Direct, read-only inspection of the saved SQLite records.")
+
+        # Match the database path rules used by SQLiteIncidentRepository.
+        configured_path = os.getenv("SQLITE_DB_PATH")
+        data_directory = Path(os.getenv("HAZARD_DATA_DIR") or PROJECT_ROOT)
+        db_path = Path(configured_path) if configured_path else data_directory / "hazardreports.sqlite3"
+        db_path = db_path.expanduser().resolve()
+
+        # Never create an empty database when checking whether a saved file exists.
+        if not db_path.is_file():
+            st.error(f"SQLite file not found: {db_path}")
+            return
+
+        try:
+            # Opening read-only ensures that this viewer cannot alter incident data.
+            with sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True, timeout=10) as db:
+                count = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+                stored_rows = db.execute(
+                    "SELECT incident_id, payload FROM incidents ORDER BY incident_id"
+                ).fetchall()
+
+            # The SQLite payload is JSON. Only show presentation-friendly fields.
+            display_rows = []
+            for incident_id, payload_text in stored_rows:
+                payload = json.loads(payload_text)
+                display_rows.append({
+                    "Incident ID": incident_id,
+                    "Date": payload.get("timestamp", ""),
+                    "Location": payload.get("location", ""),
+                    "Category": payload.get("category", ""),
+                    "Severity": payload.get("severity", ""),
+                    "Status": payload.get("status", ""),
+                    "Priority": payload.get("final_priority", ""),
+                })
+        except (sqlite3.Error, OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            st.error(f"Unable to read the SQLite database: {exc}")
+            return
+
+        st.code(str(db_path), language=None)
+        st.caption("Source table: incidents · SQLite opened in read-only mode")
+        st.metric("Records stored in SQLite", count)
+        if display_rows:
+            st.dataframe(pd.DataFrame(display_rows), hide_index=True, width="stretch")
+        else:
+            st.info("The SQLite database exists, but the incidents table is empty.")
+
     def _data_section(self, reports: list[HazardReport], records: list[dict[str, Any]]) -> None:
         st.markdown(
             '<div class="cs-flat-banner"><strong>Data stewardship</strong> · '
@@ -1292,6 +1393,10 @@ class IncidentDashboard:
             'Restoration is a destructive operation and always requires confirmation.</div>',
             unsafe_allow_html=True,
         )
+        # Diagnostic read-only SQLite viewer for assignment evidence.
+        if self._backend == "SQLITE":
+            self._sqlite_database_viewer()
+            st.divider()
         self._export_section(reports, records)
         st.divider()
         self._backup_section()

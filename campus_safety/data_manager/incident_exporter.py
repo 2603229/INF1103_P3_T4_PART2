@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+from typing import Any
 
 from campus_safety.data_manager.data_store_error import DataStoreError
 from campus_safety.domain.hazard_report import HazardReport
@@ -10,6 +11,15 @@ from campus_safety.domain.hazard_report import HazardReport
 
 class IncidentExporter:
     """Write incident report collections to supported file formats."""
+
+    @staticmethod
+    def _csv_cell(value: Any) -> Any:
+        if isinstance(value, str) and (
+            value.lstrip().startswith(("=", "+", "-", "@"))
+            or value.startswith(("\t", "\r", "\n"))
+        ):
+            return "'" + value
+        return value
 
     def export_csv(self, reports: list[HazardReport],
                    destination: str | Path) -> Path:
@@ -23,7 +33,10 @@ class IncidentExporter:
             with path.open("w", encoding="utf-8-sig", newline="") as stream:
                 writer = csv.DictWriter(stream, fieldnames=fields)
                 writer.writeheader()
-                writer.writerows(rows)
+                writer.writerows([
+                    {key: self._csv_cell(value) for key, value in row.items()}
+                    for row in rows
+                ])
             return path
         except OSError as exc:
             raise DataStoreError("Cannot export CSV") from exc

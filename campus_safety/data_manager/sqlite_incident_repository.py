@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import uuid
 from campus_safety.data_manager.data_store_error import DataStoreError
 from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.data_manager.incident_repository import IncidentRepository
@@ -35,11 +36,24 @@ class SQLiteIncidentRepository(IncidentRepository):
             path = os.getenv("SQLITE_DB_PATH") or str(
                 Path(os.getenv("HAZARD_DATA_DIR") or root) / "hazardreports.sqlite3"
             )
-        self._path = Path(path).resolve()
+        self._memory_uri: str | None = None
+        if str(path) == ":memory:":
+            self._path = Path(":memory:")
+            self._memory_uri = (
+                f"file:campus_safety_{uuid.uuid4().hex}?mode=memory&cache=shared"
+            )
+        else:
+            self._path = Path(path).resolve()
+        self._memory_anchor: sqlite3.Connection | None = None
         self._backup_dir = self._path.parent / "sqlite_backups"
         self._max_backups = max_backups
         try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
+            if self._memory_uri is not None:
+                self._memory_anchor = sqlite3.connect(
+                    self._memory_uri, timeout=10.0, uri=True
+                )
+            else:
+                self._path.parent.mkdir(parents=True, exist_ok=True)
             with closing(self._connect()) as conn, conn:
                 conn.execute("CREATE TABLE IF NOT EXISTS incidents ("
                              "incident_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
@@ -49,7 +63,11 @@ class SQLiteIncidentRepository(IncidentRepository):
                              "VALUES ('last_issued', '0')")
                 self._read_all(conn)  # reject corrupt records or invalid schemas
                 self._last_issued(conn)
+        except DataStoreError:
+            self.close()
+            raise
         except (sqlite3.Error, OSError, ValueError, InvalidRecord, UnicodeError) as exc:
+            self.close()
             raise DataStoreError(f"Cannot initialise SQLite database: {exc}") from exc
 
     # Expose the effective SQLite path for migration and diagnostics.
@@ -59,9 +77,18 @@ class SQLiteIncidentRepository(IncidentRepository):
 
     # Open a SQLite connection with a busy timeout to handle concurrent dashboard/CLI access.
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._path), timeout=10.0)
+        if self._memory_uri is not None:
+            conn = sqlite3.connect(self._memory_uri, timeout=10.0, uri=True)
+        else:
+            conn = sqlite3.connect(str(self._path), timeout=10.0)
         conn.execute("PRAGMA busy_timeout=10000")
         return conn
+
+    # Release the keeper connection that preserves a shared in-memory database.
+    def close(self) -> None:
+        if self._memory_anchor is not None:
+            self._memory_anchor.close()
+            self._memory_anchor = None
 
     # Read the persistent metadata counter; invalid contents are treated as corruption.
     @staticmethod
@@ -76,14 +103,19 @@ class SQLiteIncidentRepository(IncidentRepository):
     def _read_all(conn: sqlite3.Connection) -> list[HazardReport]:
         result = []
         for ident, payload in conn.execute("SELECT incident_id, payload FROM incidents ORDER BY rowid"):
-            fields = json.loads(payload)
-            if not isinstance(fields, dict):
-                raise DataStoreError("SQLite incident payload must be an object")
-            report = HazardReport.from_storage(fields)
-            if not ident or report.incident_id != ident:
-                raise DataStoreError("SQLite incident ID does not match stored payload")
-            result.append(report)
+            result.append(SQLiteIncidentRepository._report_from_payload(ident, payload))
         return result
+
+    # Reconstruct a validated report and verify its indexed ID matches the payload.
+    @staticmethod
+    def _report_from_payload(incident_id: str, payload: str) -> HazardReport:
+        fields = json.loads(payload)
+        if not isinstance(fields, dict):
+            raise DataStoreError("SQLite incident payload must be an object")
+        report = HazardReport.from_storage(fields)
+        if not incident_id or report.incident_id != incident_id:
+            raise DataStoreError("SQLite incident ID does not match stored payload")
+        return report
 
     # Validate incident identity/audit history before JSON encoding the SQLite payload.
     @staticmethod
@@ -107,6 +139,18 @@ class SQLiteIncidentRepository(IncidentRepository):
                 return self._read_all(conn)
         except (sqlite3.Error, OSError, ValueError, UnicodeError, InvalidRecord) as exc:
             raise DataStoreError(f"Cannot load SQLite incidents: {exc}") from exc
+
+    # Fetch and validate one row through the indexed primary-key column.
+    def get_by_id(self, incident_id: str) -> HazardReport | None:
+        try:
+            with closing(self._connect()) as conn:
+                row = conn.execute(
+                    "SELECT payload FROM incidents WHERE incident_id = ?",
+                    (incident_id,),
+                ).fetchone()
+            return self._report_from_payload(incident_id, row[0]) if row else None
+        except (sqlite3.Error, OSError, ValueError, UnicodeError, InvalidRecord) as exc:
+            raise DataStoreError(f"Cannot load SQLite incident: {exc}") from exc
 
     # Perform a single immediate transaction to reserve an ID, insert the payload and update metadata.
     # Parameter placeholders prevent SQL injection and preserve special characters.
@@ -174,6 +218,8 @@ class SQLiteIncidentRepository(IncidentRepository):
 
     # Discover known SQLite backups in the repository-managed snapshot directory.
     def list_backups(self) -> list[str]:
+        if self._memory_uri is not None:
+            return []
         try:
             return [str(p) for p in sorted(
                 self._backup_dir.glob("incidents_backup_*.sqlite3"), reverse=True
@@ -184,7 +230,7 @@ class SQLiteIncidentRepository(IncidentRepository):
     # Create a consistent SQLite snapshot using SQLite backup support rather than raw file copy.
     def create_backup(self, label: str = "") -> str | None:
         """Consistent online backup through the SQLite backup API."""
-        if not self._path.exists():
+        if self._memory_uri is not None or not self._path.exists():
             return None
         tag = re.sub(r"[^A-Za-z0-9_-]", "", label)
         name = (f"incidents_backup_{datetime.now():%Y%m%d_%H%M%S_%f}"
@@ -205,6 +251,8 @@ class SQLiteIncidentRepository(IncidentRepository):
 
     # Validate the selected backup before using a transaction-safe restore path.
     def restore_backup(self, path: str | None = None) -> None:
+        if self._memory_uri is not None:
+            raise DataStoreError("Cannot restore a file backup into an in-memory database")
         options = self.list_backups()
         source_path = Path(path) if path is not None else (Path(options[0]) if options else None)
         if source_path is None or not source_path.is_file():

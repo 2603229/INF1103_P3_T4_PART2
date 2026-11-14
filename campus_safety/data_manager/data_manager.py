@@ -39,7 +39,7 @@ class DataManager:
 
     # Find an incident by its stable public identifier; return None if absent.
     def get_by_id(self, incident_id: str) -> HazardReport | None:
-        return next((r for r in self.load() if r.incident_id == incident_id), None)
+        return self._repository.get_by_id(incident_id)
 
     # Return the audited transitions for an incident, or an empty history if missing.
     def status_history(self, incident_id: str) -> list[IncidentAuditEntry]:
@@ -118,8 +118,14 @@ class DataManager:
         min_severity: int = 1,
     ) -> list[dict[str, Any]]:
         """Filter stored records; severity thresholds rank Low=1 through Critical=4."""
+        if status_filter and status_filter not in VALID_STATUSES:
+            raise InvalidRecord("Invalid incident status filter")
+        if not 1 <= min_severity <= len(VALID_SEVERITIES):
+            raise InvalidRecord("Minimum severity must be between 1 and 4")
+
         all_reports = self.load()
         results = []
+        normalized_location_query = location_query.strip().casefold()
         severity_ranks = {
             severity.casefold(): rank
             for rank, severity in enumerate(VALID_SEVERITIES, start=1)
@@ -129,8 +135,8 @@ class DataManager:
             data = report.as_dict()
 
             # Match location keyword (case-insensitive)
-            loc = str(data.get("location", "")).lower()
-            if location_query and location_query.lower() not in loc:
+            loc = str(data.get("location", "")).casefold()
+            if normalized_location_query and normalized_location_query not in loc:
                 continue
 
             # Match status

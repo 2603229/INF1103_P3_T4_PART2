@@ -62,10 +62,12 @@ class InputValidator:
     # Returns True or False: It evaluates to True if the asset identifier is valid, and False if it's too short.
     def validate_asset(asset: str) -> bool:
         """Check if the asset name has at least 5 non-whitespace characters."""
+        # Strip whitespace to prevent padding exploitation and enforce minimum length constraint (>= 5)
         return len(asset.strip()) >= 5
 
     # This method ensures that the hazard description meets a minimum length requirement of at least 15 meaningful characters.
     @staticmethod
     def validate_description(desc: str) -> bool:
         """Check if the hazard description has at least 15 non-whitespace characters."""
+        # Strip whitespace and enforce a minimum detail threshold (>= 15 characters) for incident logs
         return len(desc.strip()) >= 15

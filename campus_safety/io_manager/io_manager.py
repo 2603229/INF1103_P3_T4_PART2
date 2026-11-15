@@ -157,13 +157,37 @@ class IOManager:
 
     # Displays the top 5 most frequently reported hazards, including their asset names and occurrence counts,
     # or notifies the user if no reports are found.
+    # def view_frequent_hazards(self, counts: list[tuple[str, int]]) -> None:
+    #     self.display_message("\nTOP 5 MOST FREQUENT HAZARDS")
+    #     if not counts:
+    #         self.display_message("[Notice] No hazard reports found.")
+    #         return
+    #     for index, (name, count) in enumerate(counts, 1):
+    #         self.display_message(f"{index}. {name} — {count} report(s)")
+
+    # Displays the top 5 most frequently reported hazards with visual frequency bars and aligned formatting.
     def view_frequent_hazards(self, counts: list[tuple[str, int]]) -> None:
-        self.display_message("\nTOP 5 MOST FREQUENT HAZARDS")
+        self.display_message("\n========== TOP 5 MOST FREQUENT HAZARDS ==========")
         if not counts:
             self.display_message("[Notice] No hazard reports found.")
+            self.display_message("================================================")
             return
+        
+        # Calculate the maximum count to scale visual indicator bars proportionally
+        max_count = max((count for _, count in counts), default=1)
+        
         for index, (name, count) in enumerate(counts, 1):
-            self.display_message(f"{index}. {name} — {count} report(s)")
+            # Dynamic pluralization for clean grammar
+            label = "report" if count == 1 else "reports"
+            
+            # Generate a proportional ASCII progress bar (up to 10 blocks wide)
+            bar_length = int((count / max_count) * 10) if max_count > 0 else 0
+            bar = "█" * bar_length
+            
+            # Display aligned row with name, count, and visual bar
+            self.display_message(f"{index}. {name:<25} | {count:>2} {label} {bar}")
+            
+        self.display_message("================================================")
 
     # Asks for optional search filters; pressing Enter skips a filter.
     # Returns keyword arguments matching DataManager.search().
@@ -218,28 +242,3 @@ class IOManager:
                 self.display_message("  [Notice] No active hazards.")
             for name, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
                 self.display_message(f"  {name}: {count}")
-
-# # --- Verification / Unit Test Script for Subtask 1.5 ---
-# if __name__ == "__main__":
-#     # Create mock storage for captured outputs
-#     captured_outputs = []
-
-#     def mock_write(msg: str) -> None:
-#         captured_outputs.append(msg)
-
-#     def mock_read(prompt: str) -> str:
-#         return "mock_input"
-
-#     # Initialize IOManager with injected mocks
-#     manager = IOManager(read=mock_read, write=mock_write)
-
-#     # Test base_dir resolution
-#     assert isinstance(manager._base_dir, Path)
-#     assert manager._base_dir.is_absolute()
-
-#     # Test display_message
-#     manager.display_message("System test message initialization successful.")
-    
-#     print("Verification passed! Captured output:", captured_outputs)
-
-#testing

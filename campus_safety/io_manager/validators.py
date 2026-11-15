@@ -1,3 +1,21 @@
+# ==============================================================================
+# CLASS SUMMARY: InputValidator
+# ==============================================================================
+# Purpose:
+# Provides a collection of static, pure validation functions designed to verify 
+# user-submitted data fields for incident and hazard reporting systems.
+#
+# Key Features:
+# 1. Name Validation: Ensures names only contain valid typography (alphabets, 
+#    spaces, quotes, hyphens, percent signs, and periods).
+# 2. Contact Verification: Validates official SIT email addresses or standard 
+#    local 8-digit phone numbers starting with 6, 8, or 9.
+# 3. Location & Headcount Checks: Validates non-empty location strings and ensures 
+#    headcounts represent whole numbers within a safe capacity range (1 to 1000).
+# 4. Text Length Constraints: Enforces minimum character length requirements 
+#    for asset identifiers (5+ chars) and hazard descriptions (15+ chars).
+# ==============================================================================
+
 from __future__ import annotations
 import re
 

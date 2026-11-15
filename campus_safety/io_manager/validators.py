@@ -27,6 +27,7 @@ class InputValidator:
     @staticmethod
     def validate_name(name: str) -> bool:
         """Check if name contains only alphabets, spaces, quotes, hyphens, or periods."""
+        # Ensure the entire string matches allowed typographic characters for proper names
         return bool(re.fullmatch(r"[A-Za-z\s'.-]+", name))
 
     # This function validates contact information to ensure it is either a valid SIT email address or 
@@ -35,7 +36,9 @@ class InputValidator:
     def validate_contact(contact: str) -> bool:
         """Check if contact is a valid SIT email or 8-digit phone number."""
         return bool(
+            # Validate official university email format ending in sit.singaporetech.edu.sg (case-insensitive)
             re.fullmatch(r"[A-Za-z0-9]+@sit\.singaporetech\.edu\.sg", contact, re.I)
+            # Or validate a standard Singapore 8-digit phone number starting with 6, 8, or 9
             or re.fullmatch(r"[689]\d{7}", contact)
         )
     

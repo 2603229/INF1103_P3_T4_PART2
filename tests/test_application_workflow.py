@@ -227,6 +227,18 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertNotIn("visual_evidence_path", stored)
         self.assertEqual(stored["image_path"], "uploads/socket.png")
 
+    # 7b. View all passes every stored report to the IO Manager.
+    def test_view_all_reports_shows_saved_reports(self) -> None:
+        app = self.make_app(FakeIO())
+        app.submit_report()
+        app.submit_report()
+
+        io = FakeIO()
+        self.make_app(io).view_all_reports()
+
+        self.assertEqual([r.incident_id for r in io.viewed_reports],
+                         ["INCIDENT-001", "INCIDENT-002"])
+
     # 8. Top hazards counts categories, highest first, limited to five.
     def test_top_hazards_counts_categories(self) -> None:
         repo = self.data

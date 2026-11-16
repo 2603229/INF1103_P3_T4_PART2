@@ -12,6 +12,7 @@ from campus_safety.application import CampusSafetyApplication
 from campus_safety.data_manager.data_store_error import DataStoreError
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+EXIT_INTERRUPTED = 130  # conventional exit code for a program stopped with Ctrl+C
 
 
 def main() -> int:
@@ -21,6 +22,9 @@ def main() -> int:
     except (DataStoreError, ValueError) as exc:
         print(f"[Startup Error] Incident database unavailable: {exc}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        print("\nStartup cancelled.", file=sys.stderr)
+        return EXIT_INTERRUPTED
     app.run()
     return 0
 

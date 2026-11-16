@@ -1,3 +1,24 @@
+# ==============================================================================
+# CLASS SUMMARY: MediaHandler
+# ==============================================================================
+# Purpose:
+# Manages the end-to-end workflow of selecting, validating, and safely copying 
+# image evidence attachments into a localised 'uploads/' directory for incident 
+# reporting systems.
+#
+# Key Features:
+# 1. Dependency Injection: Accepts custom I/O callables (read/write) and base paths 
+#    for high testability without relying on global states.
+# 2. Cross-Platform File Selection: Attempts to launch a GUI file picker via 
+#    Tkinter, with a seamless fallback to terminal text input in headless environments.
+# 3. Rigorous Validation: Verifies that the target file exists on disk and has 
+#    a supported image format (.png, .jpg, .jpeg, .webp).
+# 4. Collision-Safe Storage: Automatically creates the destination directory and 
+#    prevents file overwrites by appending incrementing numeric suffixes (_2, _3) 
+#    if a file with the same name already exists.
+# ==============================================================================
+
+
 from __future__ import annotations
 from pathlib import Path
 import shutil

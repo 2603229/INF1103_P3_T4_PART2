@@ -1,7 +1,4 @@
 # 🛡️ Campus Safety Hazard Reporting System — INF1103 Part 2
-
-**P3 Team 4 · Singapore Institute of Technology (SIT)**  
-
 ## 1. 📌 Project overview
 
 This project refactors the Phase 1 Campus Safety Hazard Reporting System into a modular, object-oriented Python application. Students and staff submit hazard reports through a command-line interface (CLI). Each report is assessed by Google Gemini, prioritised by business rules and saved to a JSON or SQLite database.
@@ -19,7 +16,7 @@ Every **new report** follows the four-manager workflow, coordinated by `CampusSa
 | --- | --- |
 | 🆕 New feature | **Facilities Search & Summary Report** — Section 6 |
 | 🚀 Advanced feature | **SQLite database integration (full CRUD)** — Section 7.1 |
-| 🖥️ Additional enhancements | **AI Assessment Review & Feedback**, **Incident Status Audit Trail**, Streamlit dashboard, live form previews, field clearing and background CSV export — Sections 7.2–7.5 |
+| 🖥️ Additional enhancements | **Dashboard sign-in and sign-out**, **AI Assessment Review & Feedback**, **Incident Status Audit Trail**, Streamlit dashboard, live form previews, field clearing and background CSV export — Sections 7.2–7.5 |
 | 🐳 Docker | `Dockerfile` — Section 8.2 |
 | ⚙️ CI | `.github/workflows/python-tests.yml` — Section 9 |
 | ✅ Tests | **233 offline `unittest` tests passed**; 51 AI tests passed in a separate overlapping runner — Section 9 |
@@ -35,7 +32,7 @@ CLI menu (displayed by `IOManager`, dispatched by `CampusSafetyApplication.run()
 5. **View Facilities Summary Report** 🆕 — active workload, backlog rate, urgent hazards, and counts by location and category.
 6. **Exit**
 
-The **Streamlit dashboard** (Section 7.4) works on the same database and adds management tasks:
+The **Streamlit dashboard** (Section 7.4) works on the same database and adds management tasks. It requires a username/password sign-in before showing dashboard content:
 
 - 📜 **Incident Status Audit Trail** — change an incident's status with a reason and view its history.
 - 👤 **AI Assessment Review & Feedback** — accept, flag or request further review of a Gemini assessment.
@@ -80,7 +77,7 @@ Integration details handled by `CampusSafetyApplication`:
 3. **Obtain an AI assessment:** `CampusSafetyApplication` invokes `AIManager`; the `AssessmentProvider` implementation returns a validated `AIAssessment`. If assessment fails, **nothing is saved**.
 4. **Evaluate and confirm:** `LogicManager` checks historical frequency/duplicates, calculates priority and routing, and the CLI displays the results for user confirmation.
 5. **Persist the record:** `DataManager` uses the configured `IncidentRepository` (JSON or SQLite) to store the report and assign its incident ID.
-6. **Monitor and update:** in a separate terminal run the Streamlit dashboard. It reads the same backend through `DataManager`. The user can inspect the incident, add a **status change with a reason** (audit history), or save a **human AI-review decision** (review history); neither review changes the original AI assessment.
+6. **Monitor and update:** in a separate terminal run the Streamlit dashboard and sign in with the dashboard credentials. It reads the same backend through `DataManager`. The user can inspect the incident, add a **status change with a reason** (audit history), or save a **human AI-review decision** (review history); neither review changes the original AI assessment.
 
 **Architecture note:** `IOManager`, `AIManager`, `LogicManager` and `DataManager` are collaborators injected into `CampusSafetyApplication`; the CLI's **Input → Assess → Prioritise → Save** sequence is an execution flow, **not** evidence that managers directly call one another. The dashboard is an independent entry point in `campus_safety/dashboard/dashboard_oop.py` and does not submit new Gemini assessments.
 
@@ -209,11 +206,13 @@ A separate `migrate_json_to_sqlite.py` command-line script is not included or re
 
 **Verification:** submit a review for a case with a complete saved AI assessment, reload the case and verify the feedback history persists while the original AI result remains unchanged. Confirm that an empty reason/invalid reviewer name is rejected without clearing valid form input. Automated coverage is included in `test_data_repositories.py` and `test_hazard_report_domain.py`; verify live form behaviour in a browser.
 
-> **Scope:** reviewer names are self-entered, **not authenticated**; the current dashboard is a local educational prototype, not a production approval system.
+> **Scope:** reviewer names remain self-entered and are **not verified against the signed-in username**. The dashboard has a basic sign-in gate, but is still a local educational prototype rather than a production approval system.
 
 ### 7.4 🖥️ Streamlit dashboard and threaded CSV export
 
-**Implementation:** `campus_safety/dashboard/` — `dashboard_oop.py` (`IncidentDashboard`), `dashboard_extensions.py` (presentation helpers) and `background_export_service.py` (`BackgroundExportService`).
+**Implementation:** `campus_safety/dashboard/` — `dashboard_oop.py` (`IncidentDashboard` and login entry check), `dashboard_auth.py` (`DashboardAuth`), `dashboard_extensions.py` (presentation helpers) and `background_export_service.py` (`BackgroundExportService`).
+
+**Dashboard authentication:** `DashboardAuth.from_env().require_login()` runs before rendering dashboard content. Until a correct username/password is submitted, Streamlit displays a **Campus Safety Operations** sign-in form. Once signed in, the username is stored in Streamlit session state and a **Log out** button is displayed in the sidebar. Logging out clears that session value. Configure `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` in `.env` (Section 8.3); the fallback values for this prototype are `admin` and `admin123`. **Change the defaults before demonstrating, sharing or deploying.** This is a basic, session-based login, not production-grade identity management.
 
 The dashboard is organised into four navigation pages:
 
@@ -228,7 +227,7 @@ The dashboard is organised into four navigation pages:
 
 The dashboard displays **Singapore time (SGT)** where timestamps are shown. Auto-refresh is limited to Overview and Insights; incident forms deliberately do not refresh every 15 seconds to avoid interrupting edits. Charts and controls use a high-contrast light presentation theme, including readable white text on blue primary action buttons.
 
-> **Security scope:** This is a local prototype, not an authenticated operational deployment. A reviewer name is self-entered, and status audit entries are application-level history rather than tamper-proof security logs. Do not expose the dashboard publicly or use real personal information for demonstration data.
+> **Security scope:** The new sign-in form limits dashboard access within a Streamlit session, but it does not provide production-grade user management or verified reviewer identities. Reviewer names are self-entered, and status audit entries are application-level history rather than tamper-proof security logs. Do not expose the dashboard publicly or use real personal information for demonstration data.
 
 ### 7.5 ✨ Live status and AI-review forms (November 2026 update)
 
@@ -275,13 +274,13 @@ py -3.12 -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 Copy-Item .env.example .env
-notepad .env          # add your Gemini API key
+notepad .env          # add your Gemini key and change the dashboard username/password
 python -m unittest discover -s tests -t . -v
 python main.py                                                   # CLI
 python -m streamlit run campus_safety/dashboard/dashboard_oop.py # dashboard (second terminal)
 ```
 
-The dashboard opens at **http://localhost:8501**. Always start it from the project root with `python -m streamlit` so the `campus_safety` package can be imported. To use both interfaces together, run the CLI and Streamlit dashboard in **separate PowerShell terminals**. Keep `HAZARD_STORAGE_BACKEND` and the database path consistent across both.
+The dashboard opens at **http://localhost:8501** and first shows the sign-in form. Use the credentials set in `.env`, then select **Log out** from the sidebar when finished. Always start it from the project root with `python -m streamlit` so the `campus_safety` package can be imported. To use both interfaces together, run the CLI and Streamlit dashboard in **separate PowerShell terminals**. Keep `HAZARD_STORAGE_BACKEND` and the database path consistent across both.
 
 If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process Bypass` in that terminal and try again. SQLite is part of Python's standard library; do **not** install a separate `sqlite3` package.
 
@@ -290,20 +289,28 @@ If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process Bypass`
 Requires Docker Desktop to be running. No local Python installation is needed.
 
 ```powershell
-# Build the image (from the repository root)
+# Build the image (from the repository root; rebuild whenever the code changes)
 docker build -t campus-safety .
 
 # Run the automated tests inside the container (no API key needed)
 docker run --rm campus-safety python -m unittest discover -s tests -t . -v
 
-# Run the interactive CLI with your .env and a persistent data volume
-docker run -it --rm --env-file .env -v campus-safety-data:/data campus-safety
+# Run the interactive CLI with persistent records and shared image evidence
+docker run -it --rm --env-file .env `
+  -v campus-safety-data:/data `
+  -v "${PWD}\uploads:/app/uploads:ro" `
+  campus-safety
 
-# Run the dashboard on the same data volume, then open http://localhost:8501
-docker run --rm -p 8501:8501 --env-file .env -v campus-safety-data:/data campus-safety python -m streamlit run campus_safety/dashboard/dashboard_oop.py --server.address=0.0.0.0
+# Run the dashboard using the same database volume and uploaded images
+docker run --rm -p 8501:8501 --env-file .env `
+  -v campus-safety-data:/data `
+  -v "${PWD}\uploads:/app/uploads:ro" `
+  campus-safety python -m streamlit run campus_safety/dashboard/dashboard_oop.py --server.address=0.0.0.0
 ```
 
-Inside the container, data is stored in the `/data` volume (`HAZARD_DATA_DIR=/data`), so incidents persist between runs and are shared by the CLI and dashboard containers. Attached images are saved inside the CLI container (`/app/uploads`), so the dashboard container cannot preview them. `.env` is excluded from the image by `.dockerignore` and passed at run time with `--env-file`. The graphical image picker is unavailable in the container; the CLI falls back to asking for a file path.
+Open **http://localhost:8501** to access the Docker dashboard. The same `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` values are passed into Docker with `--env-file .env`, so the sign-in form should also appear there. **If Docker shows an outdated dashboard without the login form, stop the old container, rebuild the image** (`docker build --no-cache -t campus-safety .`) **and run it again.** An incognito window helps confirm that the page is not using an existing authenticated session.
+
+Inside Docker, the default database is stored under `/data` (`HAZARD_DATA_DIR=/data`), and the named `campus-safety-data` volume preserves it between CLI and dashboard runs. Leave `SQLITE_DB_PATH` / `INCIDENTS_DB` unset or point them **inside `/data`**; a custom path outside `/data` may not persist in this volume. Both Docker commands bind-mount the project's local `uploads/` directory at `/app/uploads` (read-only), so the CLI and dashboard can access the same evidence files. Create `uploads/` locally before running Docker and enter a **container path**, e.g. `/app/uploads/wet_floor.jpg`, when the CLI asks for an image; a Windows `C:\...` path is not valid inside Docker. Git and Docker ignore local uploads by default, so image files are not bundled into the image. `.env` is excluded from the image by `.dockerignore` and supplied at runtime via `--env-file`. The graphical image picker is unavailable in the container; the CLI asks for a file path instead.
 
 ### 8.3 🔐 Configuration (`.env`)
 
@@ -311,11 +318,13 @@ Inside the container, data is stored in the `/data` volume (`HAZARD_DATA_DIR=/da
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Gemini credentials (required for real submissions) | — |
 | `GEMINI_MODELS` | Comma-separated model fallback order | Built-in list in `gemini_assessor.py` |
-| `HAZARD_STORAGE_BACKEND` | `json` or `sqlite` | `json` |
-| `SQLITE_DB_PATH` / `INCIDENTS_DB` | Database file for SQLite / JSON | Data folder |
+| `HAZARD_STORAGE_BACKEND` | `json` or `sqlite` | `json` when unset; `.env.example` selects `sqlite` |
+| `SQLITE_DB_PATH` / `INCIDENTS_DB` | Optional custom SQLite / JSON file path | Under `HAZARD_DATA_DIR` when unset |
 | `HAZARD_DATA_DIR` | Shared data folder for either backend | Project folder (`/data` in Docker) |
+| `DASHBOARD_USERNAME` | Username for the Streamlit login form | `admin` (prototype fallback only) |
+| `DASHBOARD_PASSWORD` | Password for the Streamlit login form | `admin123` (prototype fallback only) |
 
-Never commit `.env`, share your key or show it in screenshots. Changing the backend does **not** transfer existing records. Use **fictional test data** when demonstrating the application.
+Copy `.env.example` to `.env`, then **replace the sample dashboard credentials with a unique username and strong password** before running either the local or Docker dashboard. The login is separate from the CLI and does not authenticate self-entered reviewer names. Never commit `.env`, share your API key/password or show secrets in screenshots. Changing the backend does **not** transfer existing records. Use **fictional test data** when demonstrating the application.
 
 ### 8.4 🎨 Optional Streamlit theme
 
@@ -337,7 +346,7 @@ Streamlit can run without this file, but **keep the included version** for consi
 
 ## 9. ✅ Automated tests and CI
 
-**Verified against the supplied ZIP on 14 November 2026:** **233/233 `unittest` tests passed** locally (no failures or errors). The **separate AI Manager runner passed 51/51**; its 51 tests are already included within the full 233, so these totals must **not** be added together. Offline tests use stubbed AI responses and temporary repositories and do not require a live Gemini API key.
+**Previously reported local results on 16 November 2026 (before the dashboard login tests were included):** **233/233 `unittest` tests passed**, with zero failures or errors; the focused **AI Manager runner passed 51/51**. The 51 AI tests are included within the previously verified 233, so these totals must **not** be added together. The five newly added dashboard authentication tests are listed separately below; do not claim an updated full-suite pass total without running the updated suite. Offline tests use stubbed AI responses and temporary repositories and do not require a live Gemini API key.
 
 ```powershell
 python -m compileall -q main.py campus_safety tests
@@ -363,11 +372,12 @@ python -m tests.run_ai_tests                     # overlapping AI subset: 51 tes
 | `test_incident_exporter.py` | 4 | Exporter behaviour |
 | `test_background_export_service.py` | 9 | Threaded export service and task handling |
 | `test_dashboard_extensions.py` | 22 | Dashboard presentation/helper logic |
-| **Total `unittest` tests** | **233** | **233 passed in this verification** |
+| `test_dashboard_auth.py` | 5 | Default/overridden credentials, failed logins, case sensitivity and username whitespace |
+| **Previously verified `unittest` tests** | **233** | **233 passed before the dashboard login tests were added; rerun the full suite to confirm the new total** |
 
 `tests/test_io_manager.py` contains **three separate pytest-style checks**, not collected by `unittest` discovery and therefore **excluded** from the 233-test total. To execute them separately, install `pytest` and run `python -m pytest tests/test_io_manager.py -v`; `pytest` is not listed in the runtime `requirements.txt`.
 
-**Browser verification is separate:** the automated dashboard tests primarily cover helper logic and export services. Manually verify Streamlit rendering, live selectbox previews, button contrast and the field-clearing behaviour described in Section 7.5. The local test results above do **not** establish Docker startup or successful GitHub-hosted CI runs.
+**Browser verification is separate:** `test_dashboard_auth.py` checks login credential matching without launching Streamlit; it does not verify the actual browser login flow. Manually verify the sign-in form appears locally and in Docker, invalid credentials are rejected, successful sign-in unlocks the dashboard, **Log out** returns to the sign-in form, Streamlit rendering, live selectbox previews, button contrast and the field-clearing behaviour described in Section 7.5. The local test results above do **not** establish Docker startup or successful GitHub-hosted CI runs.
 
 **CI configuration:** `.github/workflows/python-tests.yml` runs on pushes to `main` and `feature/**`, and pull requests to `main`. The `basic-checks` job checks essential files, compiles Python, installs dependencies, runs AI tests, imports the dashboard and runs the complete `unittest` suite. The `docker` job builds the image, runs the same suite in the container and smoke-tests the CLI using menu option 6. **Review GitHub Actions results separately** before claiming CI/Docker success in the engineering report.
 
@@ -422,7 +432,8 @@ INF1103_P3_T4_PART2/
 │   ├── logic_manager/                 # Scorers, priority rules, routing and facilities summary
 │   ├── data_manager/                  # JSON/SQLite repositories, storage, export and factory
 │   └── dashboard/
-│       ├── dashboard_oop.py           # Streamlit dashboard, live previews and clear-on-save forms
+│       ├── dashboard_oop.py           # Streamlit dashboard, login gate, live previews and forms
+│       ├── dashboard_auth.py          # Session sign-in/sign-out and env-based credentials
 │       ├── dashboard_extensions.py    # Dashboard presentation helpers
 │       ├── background_export_service.py
 │       ├── README_INTEGRATION.md      # Dashboard's earlier integration notes
@@ -432,6 +443,7 @@ INF1103_P3_T4_PART2/
 │   ├── ai_manager_test/               # AI Manager unit tests and stub providers
 │   ├── test_application_workflow.py
 │   ├── test_background_export_service.py
+│   ├── test_dashboard_auth.py         # Dashboard credential validation (5 tests)
 │   ├── test_dashboard_extensions.py
 │   ├── test_data_repositories.py
 │   ├── test_hazard_report_domain.py

@@ -40,6 +40,14 @@ class CampusSafetyApplication:
         self._data = data_manager
         # Image paths from the IO Manager are relative (e.g. "uploads/x.png"); resolve them here.
         self._base_dir = Path(base_dir or Path.cwd()).resolve()
+        # Menu choice -> handler, built once instead of on every run() call.
+        self._actions = {
+            MENU_SUBMIT: self.submit_report,
+            MENU_VIEW: self.view_all_reports,
+            MENU_TOP_FIVE: self.show_top_hazards,
+            MENU_SEARCH: self.search_incidents,
+            MENU_SUMMARY: self.facilities_summary,
+        }
 
     # ------------------------------------------------------------------
     # Default object graph used by `python main.py`
@@ -67,6 +75,13 @@ class CampusSafetyApplication:
         )
 
     # ------------------------------------------------------------------
+    # Shared helper
+    # ------------------------------------------------------------------
+    def _load_records(self) -> list[dict]:
+        """Return all stored reports as plain dictionaries (the Logic Manager's format)."""
+        return [report.as_dict() for report in self._data.load()]
+
+    # ------------------------------------------------------------------
     # Workflow step: AI assessment (AI Manager)
     # ------------------------------------------------------------------
     def assess(self, report: HazardReport) -> None:
@@ -84,7 +99,7 @@ class CampusSafetyApplication:
     def evaluate(self, report: HazardReport) -> Decision:
         """Score the report against stored history and apply the resulting Decision."""
         # The Logic Manager works with plain dictionaries, so convert both sides.
-        existing = [stored.as_dict() for stored in self._data.load()]
+        existing = self._load_records()
         record = report.as_dict()
 
         frequency = self._logic.calculate_historical_frequency(record, existing)
@@ -148,12 +163,22 @@ class CampusSafetyApplication:
     # Menu option 3: top hazards (Data -> counting -> IO)
     # ------------------------------------------------------------------
     def top_hazards(self, limit: int = 5) -> list[tuple[str, int]]:
-        """Return the most frequently reported AI hazard categories, highest first."""
-        counts = Counter(
-            str(report.get("category") or "").strip() or UNCATEGORISED
-            for report in self._data.load()
-        )
-        return counts.most_common(limit)
+        """Return the most frequently reported AI hazard categories, highest first.
+
+        Categories are compared case-insensitively ("Fire" and "fire " are one hazard)
+        and shown with the spelling that was reported first.
+        Raises ValueError if limit is not a positive whole number.
+        """
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ValueError(f"limit must be a positive integer, got {limit!r}")
+        counts: Counter[str] = Counter()
+        labels: dict[str, str] = {}
+        for report in self._data.load():
+            name = str(report.get("category") or "").strip() or UNCATEGORISED
+            key = name.casefold()
+            labels.setdefault(key, name)
+            counts[key] += 1
+        return [(labels[key], total) for key, total in counts.most_common(limit)]
 
     def show_top_hazards(self) -> None:
         self._io.view_frequent_hazards(self.top_hazards())
@@ -171,8 +196,7 @@ class CampusSafetyApplication:
     # Menu option 5 (new feature): facilities summary (Data -> Logic -> IO)
     # ------------------------------------------------------------------
     def facilities_summary(self) -> FacilitySummaryReport:
-        records = [report.as_dict() for report in self._data.load()]
-        summary = self._logic.generate_facilities_summary(records)
+        summary = self._logic.generate_facilities_summary(self._load_records())
         self._io.view_facilities_summary(summary)
         return summary
 
@@ -181,19 +205,12 @@ class CampusSafetyApplication:
     # ------------------------------------------------------------------
     def run(self) -> None:
         """Show the menu until the user chooses Exit (or presses Ctrl+C)."""
-        actions = {
-            MENU_SUBMIT: self.submit_report,
-            MENU_VIEW: self.view_all_reports,
-            MENU_TOP_FIVE: self.show_top_hazards,
-            MENU_SEARCH: self.search_incidents,
-            MENU_SUMMARY: self.facilities_summary,
-        }
         try:
             while True:
                 choice = self._io.menu()
                 if choice == MENU_EXIT:
                     break
-                action = actions.get(choice)
+                action = self._actions.get(choice)
                 if action is None:
                     self._io.display_message("[Error] Unknown menu option.")
                     continue

@@ -157,6 +157,18 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertTrue(any("Could not save" in m for m in io.messages))
         self.assertEqual(self.data.load(), [])
 
+    # 2b-ii. History cannot be read for scoring, so the report is not confirmed or saved.
+    def test_history_read_failure_aborts_submission(self) -> None:
+        self.data = DataManager(BrokenRepository(self.base / "broken.json"))
+        io = FakeIO()
+
+        result = self.make_app(io).submit_report()
+
+        self.assertIsNone(result)
+        self.assertIsNone(io.decision)  # never reached the priority step
+        self.assertIsNone(io.success_report)
+        self.assertTrue(any("Cannot read incident history" in m for m in io.messages))
+
     # 2c. Invalid input stops the workflow before any AI call is made.
     def test_invalid_input_is_rejected_before_ai_call(self) -> None:
         io = FakeIO(dict(VALID_INPUT, reporter_contact="alex@gmail.com"))
@@ -215,6 +227,18 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertNotIn("visual_evidence_path", stored)
         self.assertEqual(stored["image_path"], "uploads/socket.png")
 
+    # 7b. View all passes every stored report to the IO Manager.
+    def test_view_all_reports_shows_saved_reports(self) -> None:
+        app = self.make_app(FakeIO())
+        app.submit_report()
+        app.submit_report()
+
+        io = FakeIO()
+        self.make_app(io).view_all_reports()
+
+        self.assertEqual([r.incident_id for r in io.viewed_reports],
+                         ["INCIDENT-001", "INCIDENT-002"])
+
     # 8. Top hazards counts categories, highest first, limited to five.
     def test_top_hazards_counts_categories(self) -> None:
         repo = self.data
@@ -240,6 +264,19 @@ class ApplicationWorkflowTests(unittest.TestCase):
         # equal counts keep the order they were first reported in
         self.assertEqual(app.top_hazards(limit=2), [("Uncategorised", 3), ("Plumbing", 2)])
 
+    def test_top_hazards_ignores_category_case_and_spacing(self) -> None:
+        for number, category in enumerate(["Electrical", "electrical ", "ELECTRICAL", "HVAC"], 1):
+            self.data.save(HazardReport.from_storage({"incident_id": f"INCIDENT-{number:03d}",
+                                                      "category": category}))
+        top = self.make_app(FakeIO()).top_hazards()
+        self.assertEqual(top, [("Electrical", 3), ("HVAC", 1)])
+
+    def test_top_hazards_rejects_invalid_limit(self) -> None:
+        app = self.make_app(FakeIO())
+        for bad in (0, -3, 2.5, "5", True):
+            with self.subTest(limit=bad), self.assertRaises(ValueError):
+                app.top_hazards(limit=bad)
+
     def test_top_hazards_empty_database(self) -> None:
         self.assertEqual(self.make_app(FakeIO()).top_hazards(), [])
 
@@ -256,6 +293,12 @@ class ApplicationWorkflowTests(unittest.TestCase):
     def test_run_exits_cleanly_on_ctrl_c(self) -> None:
         io = FakeIO()
         io.menu = lambda: (_ for _ in ()).throw(KeyboardInterrupt)
+        self.make_app(io).run()
+        self.assertTrue(any("Goodbye" in m for m in io.messages))
+
+    def test_run_exits_cleanly_when_input_ends(self) -> None:
+        io = FakeIO()  # no menu choices left, like piped input reaching end of file
+        io.menu = lambda: (_ for _ in ()).throw(EOFError)
         self.make_app(io).run()
         self.assertTrue(any("Goodbye" in m for m in io.messages))
 
@@ -297,12 +340,31 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertEqual(summary.hazards_by_category, {"Electrical": 2})
         self.assertIs(io.summary, summary)
 
+    def test_search_and_summary_handle_empty_database(self) -> None:
+        io = FakeIO(criteria={"location_query": "library"})
+        app = self.make_app(io)
+
+        self.assertEqual(app.search_incidents(), [])
+        self.assertEqual(io.search_results, [])
+
+        summary = app.facilities_summary()
+        self.assertEqual(summary.total_active_hazards, 0)
+        self.assertEqual(summary.hazards_by_category, {})
+        self.assertIs(io.summary, summary)
+
     # 10. Storage failures during the menu are reported, not raised as a traceback.
     def test_run_reports_storage_error_without_crashing(self) -> None:
         self.data = DataManager(BrokenRepository(self.base / "broken.json"))
         io = FakeIO(menu_choices=("2", "6"))
         self.make_app(io).run()
         self.assertTrue(any("database unavailable" in m for m in io.messages))
+
+    def test_run_reports_unknown_option_and_keeps_running(self) -> None:
+        io = FakeIO(menu_choices=("9", "2", "6"))
+        self.make_app(io).run()
+        self.assertTrue(any("Unknown menu option" in m for m in io.messages))
+        self.assertEqual(io.viewed_reports, [])  # option 2 still ran afterwards
+        self.assertTrue(any("Goodbye" in m for m in io.messages))
 
 
 class MainEntryPointTests(unittest.TestCase):
@@ -316,6 +378,12 @@ class MainEntryPointTests(unittest.TestCase):
         # patch.dict restores os.environ afterwards; .env never overrides existing variables.
         with patch.dict("os.environ", {"HAZARD_STORAGE_BACKEND": "excel"}):
             self.assertEqual(main.main(), 1)
+
+    def test_main_returns_interrupted_code_on_ctrl_c_during_startup(self) -> None:
+        with patch.object(main.CampusSafetyApplication, "create_default",
+                          side_effect=KeyboardInterrupt), \
+                patch("sys.stderr"):
+            self.assertEqual(main.main(), main.EXIT_INTERRUPTED)
 
     def test_main_runs_application_and_exits_cleanly(self) -> None:
         class FakeApp:

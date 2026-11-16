@@ -1,6 +1,3 @@
-# FILE GUIDE: Verify local image evidence and package it for Gemini.
-# Reject missing, oversized, corrupted, or incorrectly labeled image files.
-
 """Image verification and Gemini image-part preparation."""
 
 from __future__ import annotations
@@ -43,10 +40,8 @@ class ImageEvidenceProcessor:
 
         Args:
             path: Local path to the uploaded image evidence.
-
         Returns:
             Part: An image part containing verified bytes and MIME type.
-
         Raises:
             AssessmentUnavailable: If the image is unavailable, unsupported,
                 oversized, mislabeled, unreadable, or corrupted.

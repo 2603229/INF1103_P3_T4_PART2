@@ -1,6 +1,3 @@
-# FILE GUIDE: Build privacy-aware Gemini prompts for campus hazard reports.
-# Redact recognizable reporter identifiers before sending free-text fields to the API.
-
 """Prompt construction and limited personal-information redaction for Gemini."""
 
 from __future__ import annotations
@@ -24,7 +21,6 @@ class GeminiPromptBuilder:
         Args:
             value: Free-text hazard field to inspect.
             report: Hazard report containing reporter identifiers to redact.
-
         Returns:
             str: Text with recognized identifiers replaced by placeholders.
         """
@@ -60,7 +56,6 @@ class GeminiPromptBuilder:
 
         Args:
             report: Validated hazard report to assess.
-
         Returns:
             str: Prompt with relevant hazard details and recognized
                 personal details redacted from free-text fields.

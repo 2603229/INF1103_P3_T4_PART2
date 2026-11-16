@@ -1,6 +1,3 @@
-# FILE GUIDE: Offline unit tests for the GeminiAssessor API adapter.
-# Verify JSON parsing, provider failures, retries, model fallback,
-# prompt privacy and image evidence using a mocked Gemini SDK.
 
 """Offline tests for Gemini assessment requests and response validation."""
 
@@ -15,10 +12,9 @@ from pathlib import Path
 
 from campus_safety.ai_manager.ai_assessment import AIAssessment
 from campus_safety.ai_manager.assessment_unavailable import AssessmentUnavailable
-from campus_safety.ai_manager.gemini_assessor import (
-    GeminiAssessor,
-    MAX_IMAGE_BYTES,
-)
+from campus_safety.ai_manager.gemini_assessor import GeminiAssessor
+from campus_safety.ai_manager.gemini_prompt_builder import GeminiPromptBuilder
+from campus_safety.ai_manager.image_evidence_processor import MAX_IMAGE_BYTES
 from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.domain.invalid_record import InvalidRecord
 
@@ -77,7 +73,7 @@ class GeminiAssessorTests(unittest.TestCase):
         })
 
     def test_prompt_includes_hazard_but_excludes_identity(self):
-        prompt = GeminiAssessor.build_prompt(self.report)
+        prompt = GeminiPromptBuilder.build_prompt(self.report)
         self.assertIn("Campus Block A", prompt)
         self.assertIn("Water leaking near an outlet", prompt)
         self.assertNotIn("Private Reporter", prompt)
@@ -109,7 +105,6 @@ class GeminiAssessorTests(unittest.TestCase):
             GeminiAssessor.parse_response(json.dumps({**GOOD, "severity": "Extreme"}))
 
 
-    # Test that missing credentials prevent any Gemini API request.
     def test_missing_api_key_fails_without_calling_sdk(self):
         modules, client = fake_sdk([])
 
@@ -458,7 +453,7 @@ class GeminiAssessorTests(unittest.TestCase):
             ),
         })
 
-        prompt = GeminiAssessor.build_prompt(report)
+        prompt = GeminiPromptBuilder.build_prompt(report)
 
         # Hazard information must remain available.
         self.assertIn("Water leaking near the outlet", prompt)

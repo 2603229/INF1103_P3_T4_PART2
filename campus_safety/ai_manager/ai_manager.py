@@ -1,8 +1,4 @@
-# FILE GUIDE: Small AI orchestration facade that delegates to the AssessmentProvider contract.
-# Dependency injection makes Gemini interchangeable with offline test doubles (polymorphism).
-
-"""AI Manager: provider-independent AI assessment service.
-
+"""
 Coordinates assessments through the AssessmentProvider interface.
 """
 from __future__ import annotations
@@ -11,8 +7,6 @@ from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.ai_manager.ai_assessment import AIAssessment
 from campus_safety.ai_manager.assessment_unavailable import AssessmentUnavailable
 
-# Depends on an AssessmentProvider abstraction, so test doubles can replace Gemini.
-# Its only responsibility is coordinating an AI assessment request.
 class AIManager:
     """Coordinate AI assessments using an interchangeable provider.
 
@@ -27,7 +21,7 @@ class AIManager:
 
         Args:
             provider: An AssessmentProvider implementation responsible
-                for generating AI assessments.
+            for generating AI assessments.
         """
         self._provider: AssessmentProvider = provider
 
@@ -40,15 +34,13 @@ class AIManager:
 
         Args:
             report: Validated campus hazard report requiring assessment.
-
         Returns:
             AIAssessment: The validated assessment returned by the provider.
-
         Raises:
             AssessmentUnavailable: If the provider returns an object
-                that is not an AIAssessment.
+            that is not an AIAssessment.
 
-            Exceptions raised by the provider are propagated to the caller.
+        Exceptions raised by the provider are propagated to the caller.
 
         Invalid provider results must not reach the Logic Manager
         for scoring or the Data Manager for persistence.

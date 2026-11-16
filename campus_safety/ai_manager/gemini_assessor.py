@@ -1,6 +1,3 @@
-# FILE GUIDE: Gemini API adapter: sends prompt and validated image evidence,
-# parses strict JSON, retries failures and tries configured fallback models.
-# Prompt privacy and image validation are delegated to focused helper classes.
 
 """Gemini provider implementing the AssessmentProvider contract."""
 
@@ -10,33 +7,20 @@ import json
 import logging
 import os
 import time
-from typing import TYPE_CHECKING
 
 from campus_safety.ai_manager.ai_assessment import AIAssessment
 from campus_safety.ai_manager.assessment_provider import AssessmentProvider
 from campus_safety.ai_manager.assessment_unavailable import AssessmentUnavailable
 from campus_safety.ai_manager.gemini_prompt_builder import GeminiPromptBuilder
-
-# Re-export image constants so older tests/imports remain compatible.
-from campus_safety.ai_manager.image_evidence_processor import (
-    IMAGE_FORMATS as IMAGE_FORMATS,
-    MAX_IMAGE_BYTES as MAX_IMAGE_BYTES,
-    MAX_IMAGE_PIXELS as MAX_IMAGE_PIXELS,
-    ImageEvidenceProcessor,
-)
+from campus_safety.ai_manager.image_evidence_processor import ImageEvidenceProcessor
 from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.domain.invalid_record import InvalidRecord
 
-if TYPE_CHECKING:
-    from google.genai.types import Part
-
 log = logging.getLogger(__name__)
-class GeminiAssessor(AssessmentProvider):
-    """Obtain verified, five-field assessments from the live Gemini API.
 
-    Uses GeminiPromptBuilder and ImageEvidenceProcessor to keep prompt privacy
-    and image validation separate from API communication.
-    """
+
+class GeminiAssessor(AssessmentProvider):
+    """Call Gemini and validate its five-field assessment response."""
 
     def __init__(
         self,
@@ -62,17 +46,6 @@ class GeminiAssessor(AssessmentProvider):
             if value.strip()
         )
         self._max_attempts = max(1, max_attempts)
-
-    # Preserve the original public/static helpers for existing callers/tests.
-    @staticmethod
-    def _redact_personal_details(value: object, report: HazardReport) -> str:
-        """Delegate free-text redaction to GeminiPromptBuilder."""
-        return GeminiPromptBuilder.redact_personal_details(value, report)
-
-    @staticmethod
-    def build_prompt(report: HazardReport) -> str:
-        """Build the privacy-aware five-field assessment prompt."""
-        return GeminiPromptBuilder.build_prompt(report)
 
     @staticmethod
     def parse_response(raw: str) -> AIAssessment:
@@ -103,11 +76,6 @@ class GeminiAssessor(AssessmentProvider):
 
         return AIAssessment.from_mapping(payload)
 
-    @staticmethod
-    def _image_part(path: str) -> Part:
-        """Delegate file validation and SDK part creation to ImageEvidenceProcessor."""
-        return ImageEvidenceProcessor.image_part(path)
-
     def assess(self, report: HazardReport) -> AIAssessment:
         """Call Gemini with bounded retries and return only validated results.
 
@@ -132,12 +100,11 @@ class GeminiAssessor(AssessmentProvider):
         except ImportError as exc:
             raise AssessmentUnavailable("Install google-genai to use Gemini") from exc
 
-        # Always include the text prompt; attach verified image evidence if present.
-        contents = [self.build_prompt(report)]
+        contents = [GeminiPromptBuilder.build_prompt(report)]
         image_path = str(report.get("visual_evidence_path") or "")
         if image_path:
             try:
-                contents.append(self._image_part(image_path))
+                contents.append(ImageEvidenceProcessor.image_part(image_path))
             except (OSError, ValueError) as exc:
                 raise AssessmentUnavailable(
                     "Image evidence could not be read"
@@ -160,7 +127,6 @@ class GeminiAssessor(AssessmentProvider):
                             )
                             return self.parse_response(response.text or "")
                         except Exception as exc:
-                            # Never accept invalid JSON or failed API calls as success.
                             log.warning(
                                 "AI attempt %d for %s failed: %s",
                                 attempt + 1,

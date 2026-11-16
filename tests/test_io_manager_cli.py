@@ -97,8 +97,9 @@ class DisplayTests(unittest.TestCase):
     def test_view_frequent_hazards(self) -> None:
         io = ScriptedIO()
         io.manager.view_frequent_hazards([("Electrical", 3)])
-        self.assertIn("1. Electrical — 3 report(s)", io.text)
-
+        self.assertIn("1. Electrical", io.text)
+        self.assertIn("3 reports", io.text)
+        self.assertIn("██████████", io.text)
 
 class SearchCriteriaTests(unittest.TestCase):
 

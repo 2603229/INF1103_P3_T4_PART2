@@ -157,6 +157,18 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertTrue(any("Could not save" in m for m in io.messages))
         self.assertEqual(self.data.load(), [])
 
+    # 2b-ii. History cannot be read for scoring, so the report is not confirmed or saved.
+    def test_history_read_failure_aborts_submission(self) -> None:
+        self.data = DataManager(BrokenRepository(self.base / "broken.json"))
+        io = FakeIO()
+
+        result = self.make_app(io).submit_report()
+
+        self.assertIsNone(result)
+        self.assertIsNone(io.decision)  # never reached the priority step
+        self.assertIsNone(io.success_report)
+        self.assertTrue(any("Cannot read incident history" in m for m in io.messages))
+
     # 2c. Invalid input stops the workflow before any AI call is made.
     def test_invalid_input_is_rejected_before_ai_call(self) -> None:
         io = FakeIO(dict(VALID_INPUT, reporter_contact="alex@gmail.com"))

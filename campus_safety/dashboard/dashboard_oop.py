@@ -30,6 +30,7 @@ from campus_safety.domain.invalid_record import InvalidRecord
 from campus_safety.domain.schema import VALID_STATUSES
 from campus_safety.domain.ai_review_entry import REVIEW_DECISIONS
 from campus_safety.dashboard.background_export_service import BackgroundExportService
+from campus_safety.dashboard.dashboard_auth import DashboardAuth
 from campus_safety.dashboard.dashboard_extensions import (
     count_by, filter_reports, format_sg_time, monthly_counts,
     overview_metrics, parse_report_time, priority_score,
@@ -1421,6 +1422,8 @@ def incident_dashboard() -> None:
         pass
     else:
         load_dotenv(PROJECT_ROOT / ".env")
+    if not DashboardAuth.from_env().require_login():
+        return  # login form is showing; nothing else is rendered until sign-in
     backend = os.getenv("HAZARD_STORAGE_BACKEND", "json").strip().lower()
     if demo_storage_configured(backend, os.environ):
         st.markdown(STYLE, unsafe_allow_html=True)

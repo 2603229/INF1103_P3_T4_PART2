@@ -159,7 +159,10 @@ class CampusSafetyApplication:
 
         Categories are compared case-insensitively ("Fire" and "fire " are one hazard)
         and shown with the spelling that was reported first.
+        Raises ValueError if limit is not a positive whole number.
         """
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ValueError(f"limit must be a positive integer, got {limit!r}")
         counts: Counter[str] = Counter()
         labels: dict[str, str] = {}
         for report in self._data.load():

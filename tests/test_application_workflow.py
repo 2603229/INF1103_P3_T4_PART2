@@ -271,6 +271,12 @@ class ApplicationWorkflowTests(unittest.TestCase):
         top = self.make_app(FakeIO()).top_hazards()
         self.assertEqual(top, [("Electrical", 3), ("HVAC", 1)])
 
+    def test_top_hazards_rejects_invalid_limit(self) -> None:
+        app = self.make_app(FakeIO())
+        for bad in (0, -3, 2.5, "5", True):
+            with self.subTest(limit=bad), self.assertRaises(ValueError):
+                app.top_hazards(limit=bad)
+
     def test_top_hazards_empty_database(self) -> None:
         self.assertEqual(self.make_app(FakeIO()).top_hazards(), [])
 

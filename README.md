@@ -1,7 +1,4 @@
 # 🛡️ Campus Safety Hazard Reporting System — INF1103 Part 2
-
-**P3 Team 4 · Singapore Institute of Technology (SIT)**  
-
 ## 1. 📌 Project overview
 
 This project refactors the Phase 1 Campus Safety Hazard Reporting System into a modular, object-oriented Python application. Students and staff submit hazard reports through a command-line interface (CLI). Each report is assessed by Google Gemini, prioritised by business rules and saved to a JSON or SQLite database.
@@ -296,14 +293,20 @@ docker build -t campus-safety .
 # Run the automated tests inside the container (no API key needed)
 docker run --rm campus-safety python -m unittest discover -s tests -t . -v
 
-# Run the interactive CLI with your .env and a persistent data volume
-docker run -it --rm --env-file .env -v campus-safety-data:/data campus-safety
+# Run the interactive CLI with persistent records and shared image evidence
+docker run -it --rm --env-file .env `
+  -v campus-safety-data:/data `
+  -v "${PWD}\uploads:/app/uploads:ro" `
+  campus-safety
 
-# Run the dashboard on the same data volume, then open http://localhost:8501
-docker run --rm -p 8501:8501 --env-file .env -v campus-safety-data:/data campus-safety python -m streamlit run campus_safety/dashboard/dashboard_oop.py --server.address=0.0.0.0
+# Run the dashboard using the same database volume and uploaded images
+docker run --rm -p 8501:8501 --env-file .env `
+  -v campus-safety-data:/data `
+  -v "${PWD}\uploads:/app/uploads:ro" `
+  campus-safety python -m streamlit run campus_safety/dashboard/dashboard_oop.py --server.address=0.0.0.0
 ```
 
-Inside the container, data is stored in the `/data` volume (`HAZARD_DATA_DIR=/data`), so incidents persist between runs and are shared by the CLI and dashboard containers. Attached images are saved inside the CLI container (`/app/uploads`), so the dashboard container cannot preview them. `.env` is excluded from the image by `.dockerignore` and passed at run time with `--env-file`. The graphical image picker is unavailable in the container; the CLI falls back to asking for a file path.
+Inside Docker, the default database is stored under `/data` (`HAZARD_DATA_DIR=/data`), and the named `campus-safety-data` volume preserves it between CLI and dashboard runs. Leave `SQLITE_DB_PATH` / `INCIDENTS_DB` unset or point them **inside `/data`**; a custom path outside `/data` may not persist in this volume. Both Docker commands bind-mount the project's local `uploads/` directory at `/app/uploads` (read-only), so the CLI and dashboard can access the same evidence files. Create `uploads/` locally before running Docker and enter a **container path**, e.g. `/app/uploads/wet_floor.jpg`, when the CLI asks for an image; a Windows `C:\...` path is not valid inside Docker. Git and Docker ignore local uploads by default, so image files are not bundled into the image. `.env` is excluded from the image by `.dockerignore` and supplied at runtime via `--env-file`. The graphical image picker is unavailable in the container; the CLI asks for a file path instead.
 
 ### 8.3 🔐 Configuration (`.env`)
 
@@ -311,8 +314,8 @@ Inside the container, data is stored in the `/data` volume (`HAZARD_DATA_DIR=/da
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Gemini credentials (required for real submissions) | — |
 | `GEMINI_MODELS` | Comma-separated model fallback order | Built-in list in `gemini_assessor.py` |
-| `HAZARD_STORAGE_BACKEND` | `json` or `sqlite` | `json` |
-| `SQLITE_DB_PATH` / `INCIDENTS_DB` | Database file for SQLite / JSON | Data folder |
+| `HAZARD_STORAGE_BACKEND` | `json` or `sqlite` | `json` when unset; `.env.example` selects `sqlite` |
+| `SQLITE_DB_PATH` / `INCIDENTS_DB` | Optional custom SQLite / JSON file path | Under `HAZARD_DATA_DIR` when unset |
 | `HAZARD_DATA_DIR` | Shared data folder for either backend | Project folder (`/data` in Docker) |
 
 Never commit `.env`, share your key or show it in screenshots. Changing the backend does **not** transfer existing records. Use **fictional test data** when demonstrating the application.
@@ -337,7 +340,7 @@ Streamlit can run without this file, but **keep the included version** for consi
 
 ## 9. ✅ Automated tests and CI
 
-**Verified against the supplied ZIP on 14 November 2026:** **233/233 `unittest` tests passed** locally (no failures or errors). The **separate AI Manager runner passed 51/51**; its 51 tests are already included within the full 233, so these totals must **not** be added together. Offline tests use stubbed AI responses and temporary repositories and do not require a live Gemini API key.
+**Latest local results shared on 16 November 2026 (after the AI Manager refactor and IO display-test fix):** **233/233 `unittest` tests passed**, with zero failures or errors; the focused **AI Manager runner passed 51/51**. The 51 AI tests are included within the full 233, so these totals must **not** be added together. Offline tests use stubbed AI responses and temporary repositories and do not require a live Gemini API key.
 
 ```powershell
 python -m compileall -q main.py campus_safety tests

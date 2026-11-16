@@ -327,6 +327,18 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.assertEqual(summary.hazards_by_category, {"Electrical": 2})
         self.assertIs(io.summary, summary)
 
+    def test_search_and_summary_handle_empty_database(self) -> None:
+        io = FakeIO(criteria={"location_query": "library"})
+        app = self.make_app(io)
+
+        self.assertEqual(app.search_incidents(), [])
+        self.assertEqual(io.search_results, [])
+
+        summary = app.facilities_summary()
+        self.assertEqual(summary.total_active_hazards, 0)
+        self.assertEqual(summary.hazards_by_category, {})
+        self.assertIs(io.summary, summary)
+
     # 10. Storage failures during the menu are reported, not raised as a traceback.
     def test_run_reports_storage_error_without_crashing(self) -> None:
         self.data = DataManager(BrokenRepository(self.base / "broken.json"))

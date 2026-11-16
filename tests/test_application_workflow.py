@@ -379,6 +379,12 @@ class MainEntryPointTests(unittest.TestCase):
         with patch.dict("os.environ", {"HAZARD_STORAGE_BACKEND": "excel"}):
             self.assertEqual(main.main(), 1)
 
+    def test_main_returns_interrupted_code_on_ctrl_c_during_startup(self) -> None:
+        with patch.object(main.CampusSafetyApplication, "create_default",
+                          side_effect=KeyboardInterrupt), \
+                patch("sys.stderr"):
+            self.assertEqual(main.main(), main.EXIT_INTERRUPTED)
+
     def test_main_runs_application_and_exits_cleanly(self) -> None:
         class FakeApp:
             ran = False

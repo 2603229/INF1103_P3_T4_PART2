@@ -155,12 +155,19 @@ class CampusSafetyApplication:
     # Menu option 3: top hazards (Data -> counting -> IO)
     # ------------------------------------------------------------------
     def top_hazards(self, limit: int = 5) -> list[tuple[str, int]]:
-        """Return the most frequently reported AI hazard categories, highest first."""
-        counts = Counter(
-            str(report.get("category") or "").strip() or UNCATEGORISED
-            for report in self._data.load()
-        )
-        return counts.most_common(limit)
+        """Return the most frequently reported AI hazard categories, highest first.
+
+        Categories are compared case-insensitively ("Fire" and "fire " are one hazard)
+        and shown with the spelling that was reported first.
+        """
+        counts: Counter[str] = Counter()
+        labels: dict[str, str] = {}
+        for report in self._data.load():
+            name = str(report.get("category") or "").strip() or UNCATEGORISED
+            key = name.casefold()
+            labels.setdefault(key, name)
+            counts[key] += 1
+        return [(labels[key], total) for key, total in counts.most_common(limit)]
 
     def show_top_hazards(self) -> None:
         self._io.view_frequent_hazards(self.top_hazards())

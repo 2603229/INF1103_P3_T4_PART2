@@ -264,6 +264,13 @@ class ApplicationWorkflowTests(unittest.TestCase):
         # equal counts keep the order they were first reported in
         self.assertEqual(app.top_hazards(limit=2), [("Uncategorised", 3), ("Plumbing", 2)])
 
+    def test_top_hazards_ignores_category_case_and_spacing(self) -> None:
+        for number, category in enumerate(["Electrical", "electrical ", "ELECTRICAL", "HVAC"], 1):
+            self.data.save(HazardReport.from_storage({"incident_id": f"INCIDENT-{number:03d}",
+                                                      "category": category}))
+        top = self.make_app(FakeIO()).top_hazards()
+        self.assertEqual(top, [("Electrical", 3), ("HVAC", 1)])
+
     def test_top_hazards_empty_database(self) -> None:
         self.assertEqual(self.make_app(FakeIO()).top_hazards(), [])
 

@@ -304,6 +304,13 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.make_app(io).run()
         self.assertTrue(any("database unavailable" in m for m in io.messages))
 
+    def test_run_reports_unknown_option_and_keeps_running(self) -> None:
+        io = FakeIO(menu_choices=("9", "2", "6"))
+        self.make_app(io).run()
+        self.assertTrue(any("Unknown menu option" in m for m in io.messages))
+        self.assertEqual(io.viewed_reports, [])  # option 2 still ran afterwards
+        self.assertTrue(any("Goodbye" in m for m in io.messages))
+
 
 class MainEntryPointTests(unittest.TestCase):
 

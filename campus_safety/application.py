@@ -40,6 +40,14 @@ class CampusSafetyApplication:
         self._data = data_manager
         # Image paths from the IO Manager are relative (e.g. "uploads/x.png"); resolve them here.
         self._base_dir = Path(base_dir or Path.cwd()).resolve()
+        # Menu choice -> handler, built once instead of on every run() call.
+        self._actions = {
+            MENU_SUBMIT: self.submit_report,
+            MENU_VIEW: self.view_all_reports,
+            MENU_TOP_FIVE: self.show_top_hazards,
+            MENU_SEARCH: self.search_incidents,
+            MENU_SUMMARY: self.facilities_summary,
+        }
 
     # ------------------------------------------------------------------
     # Default object graph used by `python main.py`
@@ -197,19 +205,12 @@ class CampusSafetyApplication:
     # ------------------------------------------------------------------
     def run(self) -> None:
         """Show the menu until the user chooses Exit (or presses Ctrl+C)."""
-        actions = {
-            MENU_SUBMIT: self.submit_report,
-            MENU_VIEW: self.view_all_reports,
-            MENU_TOP_FIVE: self.show_top_hazards,
-            MENU_SEARCH: self.search_incidents,
-            MENU_SUMMARY: self.facilities_summary,
-        }
         try:
             while True:
                 choice = self._io.menu()
                 if choice == MENU_EXIT:
                     break
-                action = actions.get(choice)
+                action = self._actions.get(choice)
                 if action is None:
                     self._io.display_message("[Error] Unknown menu option.")
                     continue

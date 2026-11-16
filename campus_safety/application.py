@@ -67,6 +67,13 @@ class CampusSafetyApplication:
         )
 
     # ------------------------------------------------------------------
+    # Shared helper
+    # ------------------------------------------------------------------
+    def _load_records(self) -> list[dict]:
+        """Return all stored reports as plain dictionaries (the Logic Manager's format)."""
+        return [report.as_dict() for report in self._data.load()]
+
+    # ------------------------------------------------------------------
     # Workflow step: AI assessment (AI Manager)
     # ------------------------------------------------------------------
     def assess(self, report: HazardReport) -> None:
@@ -84,7 +91,7 @@ class CampusSafetyApplication:
     def evaluate(self, report: HazardReport) -> Decision:
         """Score the report against stored history and apply the resulting Decision."""
         # The Logic Manager works with plain dictionaries, so convert both sides.
-        existing = [stored.as_dict() for stored in self._data.load()]
+        existing = self._load_records()
         record = report.as_dict()
 
         frequency = self._logic.calculate_historical_frequency(record, existing)
@@ -171,8 +178,7 @@ class CampusSafetyApplication:
     # Menu option 5 (new feature): facilities summary (Data -> Logic -> IO)
     # ------------------------------------------------------------------
     def facilities_summary(self) -> FacilitySummaryReport:
-        records = [report.as_dict() for report in self._data.load()]
-        summary = self._logic.generate_facilities_summary(records)
+        summary = self._logic.generate_facilities_summary(self._load_records())
         self._io.view_facilities_summary(summary)
         return summary
 

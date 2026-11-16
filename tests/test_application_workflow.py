@@ -259,6 +259,12 @@ class ApplicationWorkflowTests(unittest.TestCase):
         self.make_app(io).run()
         self.assertTrue(any("Goodbye" in m for m in io.messages))
 
+    def test_run_exits_cleanly_when_input_ends(self) -> None:
+        io = FakeIO()  # no menu choices left, like piped input reaching end of file
+        io.menu = lambda: (_ for _ in ()).throw(EOFError)
+        self.make_app(io).run()
+        self.assertTrue(any("Goodbye" in m for m in io.messages))
+
     # 11. New feature: search uses IO criteria and DataManager filtering.
     def test_search_incidents_filters_saved_reports(self) -> None:
         app = self.make_app(FakeIO())

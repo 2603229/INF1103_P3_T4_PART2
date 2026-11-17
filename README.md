@@ -155,7 +155,7 @@ Reporter name and contact are excluded from the prompt, and recognisable names, 
 | Domain      | `FacilitySummaryReport`                                                                 | Immutable result value object with the computed `maintenance_backlog_rate` |
 | Application | `CampusSafetyApplication.search_incidents()`, `facilities_summary()`                    | Pass data between the managers                                             |
 
-**How it is tested:** `test_facilities_data_manager_search.py`, `test_facilities_logic_manager_summary.py`, `test_facility_summary_domain.py`, `test_facilities_workflow_integration.py`, the `FacilitiesSummaryRuleTests` in `test_logic_manager_rules.py`, the search/summary tests in `test_io_manager_cli.py`, and end-to-end tests in `test_application_workflow.py`.
+**How it is tested:** `test_facilities_data_manager_search.py`, `test_facilities_logic_manager_summary.py`, `test_facility_summary_domain.py`, `test_facilities_workflow_integration.py`, the facilities summary tests in `test_logic_manager_rules.py`, the search/summary tests in `test_io_manager_cli.py`, and end-to-end tests in `test_application_workflow.py`.
 
 ## 7. 🚀 Advanced feature and other extensions
 
@@ -496,7 +496,7 @@ INF1103_P3_T4_PART2/
 ### 12.1 🧩 SOLID evidence
 
 - **SRP:** each manager has one responsibility, and `CampusSafetyApplication` only coordinates. Inside the managers, responsibilities are split further: `GeminiPromptBuilder` (prompt), `ImageEvidenceProcessor` (images), `InputValidator` (input rules), `MediaHandler` (file copying), `Router` (routing), `FacilitySummaryBuilder` (summary metrics), `IncidentExporter` (file output), `DashboardAuth` (dashboard sign-in) and `DashboardLauncher` (background dashboard process).
-- **OCP:** new behaviour is added by writing a new subclass, without editing existing classes: a new `PriorityRule`, `Scorer`, `TextMatcher`, `AssessmentProvider` or `IncidentRepository`. `ConfigurationTests` in `test_logic_manager_rules.py` (e.g. `test_custom_high_score_threshold`, `test_custom_calculator_can_be_injected`) show behaviour changing through injected collaborators without editing existing classes. (A new storage backend name must still be registered in `repository_factory.py`.)
+- **OCP:** new behaviour is added by writing a new subclass, without editing existing classes: a new `PriorityRule`, `Scorer`, `TextMatcher`, `AssessmentProvider` or `IncidentRepository`. The configuration tests in `test_logic_manager_rules.py` (e.g. `test_custom_high_score_threshold`, `test_custom_calculator_can_be_injected`) show behaviour changing through injected collaborators without editing existing classes. (A new storage backend name must still be registered in `repository_factory.py`.)
 - **LSP:** `JsonIncidentRepository` and `SQLiteIncidentRepository` pass the **same** test contract in `test_data_repositories.py`; `ConstantProvider`/`StubProvider` replace `GeminiAssessor`; `ExactMatcher` replaces `FuzzyMatcher`. Client code is unchanged in every case.
 - **DIP:** `CampusSafetyApplication`, `AIManager`, `DataManager` and `LogicManager` receive their collaborators through constructors; only `create_default()` chooses the concrete classes.
 

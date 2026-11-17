@@ -2,17 +2,12 @@
 # Scoring points, the multi-condition Critical rule, High/Normal escalation,
 # routing, historical frequency, duplicate detection, sorting and facilities summary.
 
-"""Business-rule tests for LogicManager and its rule/scorer/matcher classes."""
+"""Business-rule tests for LogicManager and its collaborators."""
 import unittest
 
-from campus_safety.logic_manager.exact_matcher import ExactMatcher
-from campus_safety.logic_manager.fuzzy_matcher import FuzzyMatcher
 from campus_safety.logic_manager.logic_manager import LogicManager
 from campus_safety.logic_manager.priority_evaluator import PriorityEvaluator
-from campus_safety.logic_manager.priority_rule import PriorityRule
-from campus_safety.logic_manager.router import Router
-from campus_safety.logic_manager.scorer import Scorer
-from campus_safety.logic_manager.standard_rule import StandardRule
+from campus_safety.logic_manager.score_calculator import ScoreCalculator
 from campus_safety.logic_manager.text_matcher import TextMatcher
 
 
@@ -52,6 +47,10 @@ class ScoringTests(unittest.TestCase):
     def test_unknown_label_gets_one_point(self) -> None:
         self.assertEqual(self.logic.calculate_score_breakdown(record("Unknown"))["severity"], 1)
 
+    def test_breakdown_has_one_entry_per_factor(self) -> None:
+        self.assertEqual(set(self.logic.calculate_score_breakdown(record())),
+                         {"severity", "operational_impact", "historical_frequency"})
+
     def test_total_score_is_sum_of_breakdown(self) -> None:
         self.assertEqual(self.logic.score(record("High", "Moderate", 2)), 4 + 2 + 2)
 
@@ -68,6 +67,7 @@ class PriorityRuleTests(unittest.TestCase):
                 result = self.logic.evaluate(record("Critical", impact))
                 self.assertEqual(result["priority"], "Critical")
                 self.assertEqual(result["route"], "Urgent Emergency Dispatch")
+                self.assertEqual(result["action"], "Immediate Emergency Dispatch")
 
     def test_critical_severity_with_minor_impact_is_only_high(self) -> None:
         self.assertEqual(self.logic.evaluate(record("Critical", "Minor"))["priority"], "High")
@@ -96,32 +96,78 @@ class PriorityRuleTests(unittest.TestCase):
         self.assertEqual(set(self.logic.evaluate(record())),
                          {"priority", "score", "action", "reason", "route", "score_breakdown"})
 
-    def test_custom_rule_can_be_added_without_editing_evaluator(self) -> None:
-        """OCP: new behaviour by adding a PriorityRule subclass."""
-        class LargeCrowdRule(PriorityRule):
-            def __init__(self) -> None:
-                super().__init__("High", "Crowd Control", "Many people affected.")
+    def test_missing_ai_fields_default_to_normal(self) -> None:
+        self.assertEqual(self.logic.evaluate({})["priority"], "Normal")
 
-            def matches(self, severity, operational_impact, score) -> bool:
-                return score >= 3
 
-        evaluator = PriorityEvaluator(rules=[LargeCrowdRule(), StandardRule()])
-        result = LogicManager(evaluator=evaluator).evaluate(record("Medium", "Minor"))
-        self.assertEqual(result["action"], "Crowd Control")
+class ConfigurationTests(unittest.TestCase):
+    """Collaborators are injected, so behaviour changes without editing any class."""
 
-    def test_evaluator_requires_at_least_one_rule(self) -> None:
+    def test_custom_high_score_threshold(self) -> None:
+        default = LogicManager().evaluate(record("Medium", "Minor"))  # score 3
+        lowered = LogicManager(evaluator=PriorityEvaluator(high_score_threshold=3)).evaluate(
+            record("Medium", "Minor"))
+        self.assertEqual(default["priority"], "Normal")
+        self.assertEqual(lowered["priority"], "High")
+
+    def test_custom_calculator_can_be_injected(self) -> None:
+        class BigScore(ScoreCalculator):
+            def breakdown(self, record):
+                return {"severity": 10}
+
+        result = PriorityEvaluator(calculator=BigScore()).evaluate(record("Low", "Minor"))
+        self.assertEqual(result["score"], 10)
+        self.assertEqual(result["priority"], "High")
+
+    def test_custom_queues_and_default_queue(self) -> None:
+        evaluator = PriorityEvaluator(queues={"Critical": "Fire Station"}, default_queue="General Queue")
+        self.assertEqual(evaluator.route("critical"), "Fire Station")  # keys are case-insensitive
+        self.assertEqual(evaluator.route("  CRITICAL "), "Fire Station")
+        self.assertEqual(evaluator.route("Normal"), "General Queue")
+
+    def test_logic_manager_route_uses_record_priority(self) -> None:
+        logic = LogicManager()
+        self.assertEqual(logic.route({"priority": "High"}), "Priority Maintenance Queue")
+        self.assertEqual(logic.route({}), "Standard Maintenance Queue")
+
+
+class TextMatcherTests(unittest.TestCase):
+
+    def test_tolerates_typos_and_spacing(self) -> None:
+        matcher = TextMatcher()
+        self.assertTrue(matcher.matches("Libary", "Library"))
+        self.assertTrue(matcher.matches("Air con", "Aircon"))
+
+    def test_numbers_must_match_exactly(self) -> None:
+        matcher = TextMatcher()
+        self.assertFalse(matcher.matches("Lab 1", "Lab 10"))
+        self.assertFalse(matcher.matches("Lab 1", "Lab 2"))
+
+    def test_single_letter_identifiers_must_match_exactly(self) -> None:
+        self.assertFalse(TextMatcher().matches("Block A Lift 1", "Block B Lift 1"))
+
+    def test_blank_text_never_matches_text(self) -> None:
+        self.assertFalse(TextMatcher().matches("", "Library"))
+
+    def test_threshold_property_and_validation(self) -> None:
+        matcher = TextMatcher(0.9)
+        self.assertEqual(matcher.threshold, 0.9)
+        matcher.threshold = 1.0
+        self.assertEqual(matcher.threshold, 1.0)
+        for bad in (0, -0.1, 1.5):
+            with self.subTest(value=bad), self.assertRaises(ValueError):
+                matcher.threshold = bad
         with self.assertRaises(ValueError):
-            PriorityEvaluator(rules=[])
+            TextMatcher(threshold=0)
 
-    def test_router_custom_queue_and_default(self) -> None:
-        router = Router({"critical": "Fire Station"}, "General Queue")
-        self.assertEqual(router.route("Critical"), "Fire Station")
-        self.assertEqual(router.route("Normal"), "General Queue")
+    def test_strict_threshold_only_matches_identical_text(self) -> None:
+        strict = TextMatcher(1.0)
+        self.assertTrue(strict.matches(" Lab  1", "lab 1"))
+        self.assertFalse(strict.matches("Libary", "Library"))
 
-    def test_abstract_bases_cannot_be_instantiated(self) -> None:
-        for abstract in (PriorityRule, Scorer, TextMatcher):
-            with self.subTest(cls=abstract.__name__), self.assertRaises(TypeError):
-                abstract()
+    def test_normalise(self) -> None:
+        self.assertEqual(TextMatcher.normalise("  Library   Level  2 "), "library level 2")
+        self.assertEqual(TextMatcher.normalise(None), "")
 
 
 class HistoryTests(unittest.TestCase):
@@ -154,29 +200,42 @@ class HistoryTests(unittest.TestCase):
         history = [self.existing("INCIDENT-001", "Pending Review", location="", asset="")]
         self.assertEqual(self.logic.check_duplicate({"location": "", "asset_info": ""}, history), "Unique")
 
+    def test_blank_record_has_zero_frequency(self) -> None:
+        history = [self.existing("INCIDENT-001", "Closed", location="", asset="")]
+        self.assertEqual(self.logic.calculate_historical_frequency({"location": "", "asset_info": ""}, history), 0)
+
+    def test_record_is_never_a_duplicate_of_itself(self) -> None:
+        saved = self.existing("INCIDENT-009", "Pending Review")
+        self.assertEqual(self.logic.check_duplicate(saved, [saved]), "Unique")
+
+    def test_record_is_not_counted_in_its_own_history(self) -> None:
+        saved = self.existing("INCIDENT-009", "Closed")
+        self.assertEqual(self.logic.calculate_historical_frequency(saved, [saved]), 0)
+
     def test_fuzzy_matching_tolerates_typos(self) -> None:
         history = [self.existing("INCIDENT-001", "Pending Review", location="Libary Level 2")]
         self.assertEqual(self.logic.check_duplicate(self.new, history), "Potential Duplicate of INCIDENT-001")
 
-    def test_fuzzy_matching_requires_same_numbers(self) -> None:
-        matcher = FuzzyMatcher()
-        self.assertFalse(matcher.matches("Lab 1", "Lab 10"))
-        self.assertTrue(matcher.matches("Air con", "Aircon"))
+    def test_different_block_letters_are_not_duplicates(self) -> None:
+        history = [self.existing("INCIDENT-001", "Pending Review", location="Block A Lift 1", asset="Lift")]
+        other = {"location": "Block B Lift 1", "asset_info": "Lift"}
+        self.assertEqual(self.logic.check_duplicate(other, history), "Unique")
 
-    def test_exact_matcher_can_replace_fuzzy_matcher(self) -> None:
-        """LSP: any TextMatcher can be injected."""
+    def test_stricter_matcher_can_be_injected(self) -> None:
         history = [self.existing("INCIDENT-001", "Pending Review", location="Libary Level 2")]
-        strict = LogicManager(matcher=ExactMatcher())
+        strict = LogicManager(matcher=TextMatcher(1.0))
         self.assertEqual(strict.check_duplicate(self.new, history), "Unique")
-
-    def test_fuzzy_threshold_validation(self) -> None:
-        with self.assertRaises(ValueError):
-            FuzzyMatcher(threshold=0)
 
     def test_sort_by_severity(self) -> None:
         rows = [{"severity": s} for s in ("Low", "Critical", "Unknown", "Medium", "High")]
         self.assertEqual([r["severity"] for r in self.logic.sort_incidents_by_severity(rows)],
                          ["Critical", "High", "Medium", "Low", "Unknown"])
+
+    def test_sort_is_case_insensitive_and_does_not_change_input(self) -> None:
+        rows = [{"severity": "low"}, {"severity": "CRITICAL"}, {"severity": " high "}]
+        result = self.logic.sort_incidents_by_severity(rows)
+        self.assertEqual([r["severity"] for r in result], ["CRITICAL", " high ", "low"])
+        self.assertEqual([r["severity"] for r in rows], ["low", "CRITICAL", " high "])
 
 
 class FacilitiesSummaryRuleTests(unittest.TestCase):
@@ -188,6 +247,11 @@ class FacilitiesSummaryRuleTests(unittest.TestCase):
         summary = LogicManager().generate_facilities_summary(rows)
         self.assertEqual(summary.total_active_hazards, 1)
         self.assertEqual(summary.hazards_by_location, {"Block A": 1})
+
+    def test_pending_and_in_progress_counts(self) -> None:
+        rows = [{"status": "Pending Review"}, {"status": "Pending Review"}, {"status": "In Progress"}]
+        summary = LogicManager().generate_facilities_summary(rows)
+        self.assertEqual((summary.pending_repair_count, summary.in_progress_count), (2, 1))
 
     def test_urgent_uses_saved_final_priority(self) -> None:
         rows = [{"status": "Pending Review", "final_priority": "Critical"},

@@ -18,8 +18,18 @@ VALID = {
 }
 
 
-class InputValidationTests(unittest.TestCase):
+class HazardReportDomainTests(unittest.TestCase):
 
+    def saved_report(self, assessed: bool = False) -> HazardReport:
+        """A valid report with an incident ID, optionally carrying an AI assessment."""
+        report = HazardReport.from_input(VALID)
+        if assessed:
+            report.attach_assessment(
+                AIAssessment("Blocked exit", "Structural", "High", "Severe", "Keep corridor clear"))
+        report.assign_identity("INCIDENT-001")
+        return report
+
+    # --- Input validation ------------------------------------------------------
     def test_valid_input_is_normalised(self) -> None:
         report = HazardReport.from_input(dict(VALID, location="  Block A  "))
         self.assertEqual(report.location, "Block A")
@@ -45,8 +55,7 @@ class InputValidationTests(unittest.TestCase):
                 HazardReport.from_input(dict(VALID, **change))
 
 
-class EncapsulationTests(unittest.TestCase):
-
+    # --- Encapsulation ----------------------------------------------------------
     def test_get_returns_copies_of_nested_data(self) -> None:
         report = HazardReport.from_storage({"incident_id": "INCIDENT-001", "tags": ["a"]})
         report.get("tags").append("hacked")
@@ -71,56 +80,48 @@ class EncapsulationTests(unittest.TestCase):
             decision.score_breakdown["severity"] = 99
 
 
-class StatusTransitionTests(unittest.TestCase):
-
-    def setUp(self) -> None:
-        self.report = HazardReport.from_input(VALID)
-        self.report.assign_identity("INCIDENT-001")
-
+    # --- Status transitions -----------------------------------------------------
     def test_assign_identity_only_once(self) -> None:
         with self.assertRaises(InvalidRecord):
-            self.report.assign_identity("INCIDENT-002")
+            self.saved_report().assign_identity("INCIDENT-002")
 
     def test_change_status_appends_history(self) -> None:
-        self.assertTrue(self.report.change_status("In Progress", "Assigned"))
-        self.assertTrue(self.report.change_status("Resolved", "Fixed"))
-        self.assertEqual([e.new_status for e in self.report.status_history()],
+        report = self.saved_report()
+        self.assertTrue(report.change_status("In Progress", "Assigned"))
+        self.assertTrue(report.change_status("Resolved", "Fixed"))
+        self.assertEqual([e.new_status for e in report.status_history()],
                          ["Pending Review", "In Progress", "Resolved"])
 
     def test_same_status_is_a_no_op(self) -> None:
-        self.assertFalse(self.report.change_status("Pending Review"))
-        self.assertEqual(len(self.report.status_history()), 1)
+        report = self.saved_report()
+        self.assertFalse(report.change_status("Pending Review"))
+        self.assertEqual(len(report.status_history()), 1)
 
     def test_invalid_status_and_blank_reason_rejected(self) -> None:
+        report = self.saved_report()
         with self.assertRaises(InvalidRecord):
-            self.report.change_status("Finished")
+            report.change_status("Finished")
         with self.assertRaises(InvalidRecord):
-            self.report.change_status("Resolved", "   ")
+            report.change_status("Resolved", "   ")
 
     def test_audit_entry_requires_timezone(self) -> None:
         with self.assertRaises(InvalidRecord):
             IncidentAuditEntry("INCIDENT-001", None, "Pending Review", "2026-01-01T10:00:00", "x")
 
     def test_history_from_another_incident_is_rejected(self) -> None:
-        fields = self.report.as_dict()
+        fields = self.saved_report().as_dict()
         fields["incident_id"] = "INCIDENT-999"
         with self.assertRaises(InvalidRecord):
             HazardReport.from_storage(fields)
 
 
-class AIReviewTests(unittest.TestCase):
-
-    def setUp(self) -> None:
-        self.report = HazardReport.from_input(VALID)
-        self.report.attach_assessment(
-            AIAssessment("Blocked exit", "Structural", "High", "Severe", "Keep corridor clear"))
-        self.report.assign_identity("INCIDENT-001")
-
+    # --- AI review ----------------------------------------------------------------
     def test_review_is_appended_and_ai_fields_unchanged(self) -> None:
-        self.report.add_ai_review("Officer Lim", "Accepted", "Matches inspection")
-        self.assertEqual(self.report.ai_review_history()[0].reviewer, "Officer Lim")
-        self.assertEqual(self.report.get("severity"), "High")
-        self.assertEqual(self.report.get("assessment_source"), "Gemini AI")
+        report = self.saved_report(assessed=True)
+        report.add_ai_review("Officer Lim", "Accepted", "Matches inspection")
+        self.assertEqual(report.ai_review_history()[0].reviewer, "Officer Lim")
+        self.assertEqual(report.get("severity"), "High")
+        self.assertEqual(report.get("assessment_source"), "Gemini AI")
 
     def test_review_requires_saved_assessment(self) -> None:
         unassessed = HazardReport.from_input(VALID)
@@ -129,10 +130,11 @@ class AIReviewTests(unittest.TestCase):
             unassessed.add_ai_review("Officer Lim", "Accepted", "ok")
 
     def test_invalid_review_values_rejected(self) -> None:
+        report = self.saved_report(assessed=True)
         with self.assertRaises(InvalidRecord):
-            self.report.add_ai_review("Officer Lim", "Maybe", "unsure")
+            report.add_ai_review("Officer Lim", "Maybe", "unsure")
         with self.assertRaises(InvalidRecord):
-            self.report.add_ai_review("L", "Accepted", "name too short")
+            report.add_ai_review("L", "Accepted", "name too short")
 
     def test_review_entry_rejects_unexpected_fields(self) -> None:
         with self.assertRaises(InvalidRecord):

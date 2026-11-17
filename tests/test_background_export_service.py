@@ -16,7 +16,7 @@ def read_csv(data: bytes) -> list[dict[str, str]]:
     return list(csv.DictReader(io.StringIO(data.decode("utf-8-sig"))))
 
 
-class CsvContentTests(unittest.TestCase):
+class BackgroundExportServiceTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.service = BackgroundExportService(max_workers=1)
@@ -27,6 +27,7 @@ class CsvContentTests(unittest.TestCase):
     def export(self, rows) -> bytes:
         return self.service.submit_csv(rows).result(timeout=10)
 
+    # --- CSV content ------------------------------------------------------------
     def test_schema_columns_come_first_then_extra_fields_sorted(self) -> None:
         data = self.export([{"incident_id": "INCIDENT-001", "zeta": 1, "alpha": 2}])
         header = next(csv.reader(io.StringIO(data.decode("utf-8-sig"))))
@@ -62,8 +63,7 @@ class CsvContentTests(unittest.TestCase):
             self.export([])
 
 
-class ThreadingTests(unittest.TestCase):
-
+    # --- Threading: these tests build their own services to control the worker
     def test_csv_is_built_on_a_worker_thread(self) -> None:
         names: list[str] = []
         original = BackgroundExportService._render_csv

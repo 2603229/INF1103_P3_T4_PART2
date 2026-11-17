@@ -1,4 +1,5 @@
 # 🛡️ Campus Safety Hazard Reporting System — INF1103 Part 2
+
 ## 1. 📌 Project overview
 
 This project refactors the Phase 1 Campus Safety Hazard Reporting System into a modular, object-oriented Python application. Students and staff submit hazard reports through a command-line interface (CLI). Each report is assessed by Google Gemini, prioritised by business rules and saved to a JSON or SQLite database.
@@ -12,14 +13,14 @@ Every **new report** follows the four-manager workflow, coordinated by `CampusSa
 
 > **Business rule:** a new incident is **not saved** if the AI assessment is unavailable or invalid. The live Gemini API is needed for real submissions but **not** for the automated tests.
 
-| Deliverable | Where |
-| --- | --- |
-| 🆕 New feature | **Facilities Search & Summary Report** — Section 6 |
-| 🚀 Advanced feature | **SQLite database integration (full CRUD)** — Section 7.1 |
-| 🖥️ Additional enhancements | **Dashboard sign-in and sign-out**, **AI Assessment Review & Feedback**, **Incident Status Audit Trail**, Streamlit dashboard, live form previews, field clearing and background CSV export — Sections 7.2–7.5 |
-| 🐳 Docker | `Dockerfile` — Section 8.2 |
-| ⚙️ CI | `.github/workflows/python-tests.yml` — Section 9 |
-| ✅ Tests | **233 offline `unittest` tests passed**; 51 AI tests passed in a separate overlapping runner — Section 9 |
+| Deliverable                | Where                                                                                                                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🆕 New feature             | **Facilities Search & Summary Report** — Section 6                                                                                                                          |
+| 🚀 Advanced feature        | **SQLite database integration (full CRUD)** — Section 7.1                                                                                                                   |
+| 🖥️ Additional enhancements | **AI Assessment Review & Feedback**, **Incident Status Audit Trail**, Streamlit dashboard, live form previews, field clearing and background CSV export — Sections 7.2–7.5  |
+| 🐳 Docker                  | `Dockerfile` — Section 8.2                                                                                                                                                  |
+| ⚙️ CI                      | `.github/workflows/python-tests.yml` — Section 9                                                                                                                            |
+| ✅ Tests                   | **257 offline `unittest` tests passed** (including 4 shared-storage integration tests and 7 launcher tests); the focused AI runner overlaps with the full suite — Section 9 |
 
 ## 2. ✨ Main application functions
 
@@ -32,7 +33,7 @@ CLI menu (displayed by `IOManager`, dispatched by `CampusSafetyApplication.run()
 5. **View Facilities Summary Report** 🆕 — active workload, backlog rate, urgent hazards, and counts by location and category.
 6. **Exit**
 
-The **Streamlit dashboard** (Section 7.4) works on the same database and adds management tasks. It requires a username/password sign-in before showing dashboard content:
+The **Streamlit dashboard** (Section 7.4) works on the same database and adds management tasks:
 
 - 📜 **Incident Status Audit Trail** — change an incident's status with a reason and view its history.
 - 👤 **AI Assessment Review & Feedback** — accept, flag or request further review of a Gemini assessment.
@@ -68,47 +69,46 @@ Integration details handled by `CampusSafetyApplication`:
 - An attached image's relative path (e.g. `uploads/photo.png`) is resolved to a runtime-only path for Gemini. The absolute path is never saved.
 - `AssessmentUnavailable`, `InvalidRecord` and `DataStoreError` are shown as user-friendly messages instead of tracebacks (see Section 10).
 
-`main.py` only starts the application. `CampusSafetyApplication.create_default()` loads `.env`, creates each manager and injects them.
+`main.py` is the **single-command launcher**: it starts the Streamlit dashboard in a background process and runs the reporting CLI in the same terminal. `CampusSafetyApplication.create_default()` loads `.env`, creates each manager and injects them.
 
 ### 3.1 End-to-end example: incident submission → dashboard
 
-1. **Start the CLI:** run `python main.py`; the entry point creates `CampusSafetyApplication` and the four managers.
+1. **Start both interfaces:** run `python main.py`; the entry point launches the dashboard in your browser and starts `CampusSafetyApplication` and its four managers in the terminal.
 2. **Report a hazard:** select menu option 1 and enter a fictional reporter, site/location, affected asset, number of people and description; attach a supported image if available. `IOManager` validates the input and creates a `HazardReport`.
 3. **Obtain an AI assessment:** `CampusSafetyApplication` invokes `AIManager`; the `AssessmentProvider` implementation returns a validated `AIAssessment`. If assessment fails, **nothing is saved**.
 4. **Evaluate and confirm:** `LogicManager` checks historical frequency/duplicates, calculates priority and routing, and the CLI displays the results for user confirmation.
 5. **Persist the record:** `DataManager` uses the configured `IncidentRepository` (JSON or SQLite) to store the report and assign its incident ID.
-6. **Monitor and update:** in a separate terminal run the Streamlit dashboard and sign in with the dashboard credentials. It reads the same backend through `DataManager`. The user can inspect the incident, add a **status change with a reason** (audit history), or save a **human AI-review decision** (review history); neither review changes the original AI assessment.
+6. **Monitor and update:** use the dashboard that automatically opened in your browser. It reads the same backend through `DataManager`. The user can inspect the incident, add a **status change with a reason** (audit history), or save a **human AI-review decision** (review history); neither review changes the original AI assessment.
 
-**Architecture note:** `IOManager`, `AIManager`, `LogicManager` and `DataManager` are collaborators injected into `CampusSafetyApplication`; the CLI's **Input → Assess → Prioritise → Save** sequence is an execution flow, **not** evidence that managers directly call one another. The dashboard is an independent entry point in `campus_safety/dashboard/dashboard_oop.py` and does not submit new Gemini assessments.
-
+**Architecture note:** `IOManager`, `AIManager`, `LogicManager` and `DataManager` are collaborators injected into `CampusSafetyApplication`; the CLI's **Input → Assess → Prioritise → Save** sequence is an execution flow, **not** evidence that managers directly call one another. The dashboard runs in a separate **background process**, automatically started by `main.py`; its script is `dashboard.py` (which imports `campus_safety/dashboard/dashboard_oop.py`). The dashboard does not submit new Gemini assessments.
 
 ## 4. 🔁 Refactoring from Phase 1
 
 Phase 1 passed plain dictionaries between procedural functions and stored them in a JSON file. Phase 2 keeps the same record fields (so Phase 1 JSON records still load) but moves each responsibility into classes:
 
-| Responsibility | Phase 2 object-oriented design |
-| --- | --- |
-| Incident record | `HazardReport` entity with validated construction and controlled state changes |
-| Input / output | `IOManager` with `InputValidator` and `MediaHandler`, using injectable read/write callables |
-| AI processing | `AIManager` → `AssessmentProvider` ABC → `GeminiAssessor`, with `GeminiPromptBuilder`, `ImageEvidenceProcessor` and `AIAssessment` validation |
-| Business rules | `Scorer` / `PriorityRule` / `TextMatcher` hierarchies combined by `PriorityEvaluator` and `Router` |
-| Persistence | `DataManager` → `IncidentRepository` ABC → JSON or SQLite implementation |
-| Program flow | `CampusSafetyApplication` coordinating injected managers |
+| Responsibility  | Phase 2 object-oriented design                                                                                                                |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Incident record | `HazardReport` entity with validated construction and controlled state changes                                                                |
+| Input / output  | `IOManager` with `InputValidator` and `MediaHandler`, using injectable read/write callables                                                   |
+| AI processing   | `AIManager` → `AssessmentProvider` ABC → `GeminiAssessor`, with `GeminiPromptBuilder`, `ImageEvidenceProcessor` and `AIAssessment` validation |
+| Business rules  | `Scorer` / `PriorityRule` / `TextMatcher` hierarchies combined by `PriorityEvaluator` and `Router`                                            |
+| Persistence     | `DataManager` → `IncidentRepository` ABC → JSON or SQLite implementation                                                                      |
+| Program flow    | `CampusSafetyApplication` coordinating injected managers                                                                                      |
 
-The Phase 1 domain rules are preserved, including the **multi-condition rule** using two AI fields: *Critical severity **and** Severe/Catastrophic impact → Critical priority* (`CriticalRule`).
+The Phase 1 domain rules are preserved, including the **multi-condition rule** using two AI fields: _Critical severity **and** Severe/Catastrophic impact → Critical priority_ (`CriticalRule`).
 
 ## 5. 🧠 Business rules
 
 ### 5.1 Input validation
 
-| Field | Rule |
-| --- | --- |
-| Reporter name | Letters, spaces, `'`, `.` and `-` only |
-| Contact | SIT email (`...@sit.singaporetech.edu.sg`) or an 8-digit number starting with 6, 8 or 9 |
-| Location | Not empty |
-| People affected | Whole number from 1 to 1000 |
-| Asset / summary | At least 5 characters in the CLI (`InputValidator`); at least 3 in the domain model |
-| Description | At least 15 characters |
+| Field           | Rule                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------- |
+| Reporter name   | Letters, spaces, `'`, `.` and `-` only                                                  |
+| Contact         | SIT email (`...@sit.singaporetech.edu.sg`) or an 8-digit number starting with 6, 8 or 9 |
+| Location        | Not empty                                                                               |
+| People affected | Whole number from 1 to 1000                                                             |
+| Asset / summary | At least 5 characters in the CLI (`InputValidator`); at least 3 in the domain model     |
+| Description     | At least 15 characters                                                                  |
 
 ### 5.2 AI assessment (`AIAssessment`)
 
@@ -122,19 +122,19 @@ Reporter name and contact are excluded from the prompt, and recognisable names, 
 
 ### 5.3 Priority scoring (`LogicManager`)
 
-| Factor | Points |
-| --- | --- |
-| Severity | Low 1 · Medium 2 · High 4 · Critical 5 |
-| Operational impact | Minor 1 · Moderate 2 · Severe 4 · Catastrophic 5 |
-| Historical frequency (resolved/closed incidents at the same location and asset) | 1 → 1 · 2–4 → 2 · 5+ → 3 |
+| Factor                                                                          | Points                                           |
+| ------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Severity                                                                        | Low 1 · Medium 2 · High 4 · Critical 5           |
+| Operational impact                                                              | Minor 1 · Moderate 2 · Severe 4 · Catastrophic 5 |
+| Historical frequency (resolved/closed incidents at the same location and asset) | 1 → 1 · 2–4 → 2 · 5+ → 3                         |
 
-| Priority | Rule (first match wins) | Route |
-| --- | --- | --- |
-| Critical | Severity Critical **and** impact Severe/Catastrophic | Urgent Emergency Dispatch |
-| High | Severity High/Critical, **or** impact Severe/Catastrophic, **or** score ≥ 7 | Priority Maintenance Queue |
-| Normal | Everything else | Standard Maintenance Queue |
+| Priority | Rule (first match wins)                                                     | Route                      |
+| -------- | --------------------------------------------------------------------------- | -------------------------- |
+| Critical | Severity Critical **and** impact Severe/Catastrophic                        | Urgent Emergency Dispatch  |
+| High     | Severity High/Critical, **or** impact Severe/Catastrophic, **or** score ≥ 7 | Priority Maintenance Queue |
+| Normal   | Everything else                                                             | Standard Maintenance Queue |
 
-**Duplicate detection:** a new report matching an *open* incident at the same location and asset is marked `Potential Duplicate of INCIDENT-xxx`. `FuzzyMatcher` tolerates typos ("Libary" ≈ "Library") but requires numbers to match exactly ("Lab 1" ≠ "Lab 10").
+**Duplicate detection:** a new report matching an _open_ incident at the same location and asset is marked `Potential Duplicate of INCIDENT-xxx`. `FuzzyMatcher` tolerates typos ("Libary" ≈ "Library") but requires numbers to match exactly ("Lab 1" ≠ "Lab 10").
 
 ## 6. 🆕 New feature — Facilities Search & Summary Report
 
@@ -147,13 +147,13 @@ Reporter name and contact are excluded from the prompt, and recognisable names, 
 
 **Classes involved:**
 
-| Manager | Class / method | Responsibility |
-| --- | --- | --- |
-| IO | `IOManager.get_search_criteria()`, `view_search_results()`, `view_facilities_summary()` | Collect and validate filters; display results and metrics |
-| Data | `DataManager.search()` | Filter stored records by location, status, category and severity rank |
-| Logic | `LogicManager.generate_facilities_summary()` → `FacilitySummaryBuilder` | Apply the "active hazard" and "urgent" business rules and aggregate counts |
-| Domain | `FacilitySummaryReport` | Immutable result value object with the computed `maintenance_backlog_rate` |
-| Application | `CampusSafetyApplication.search_incidents()`, `facilities_summary()` | Pass data between the managers |
+| Manager     | Class / method                                                                          | Responsibility                                                             |
+| ----------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| IO          | `IOManager.get_search_criteria()`, `view_search_results()`, `view_facilities_summary()` | Collect and validate filters; display results and metrics                  |
+| Data        | `DataManager.search()`                                                                  | Filter stored records by location, status, category and severity rank      |
+| Logic       | `LogicManager.generate_facilities_summary()` → `FacilitySummaryBuilder`                 | Apply the "active hazard" and "urgent" business rules and aggregate counts |
+| Domain      | `FacilitySummaryReport`                                                                 | Immutable result value object with the computed `maintenance_backlog_rate` |
+| Application | `CampusSafetyApplication.search_incidents()`, `facilities_summary()`                    | Pass data between the managers                                             |
 
 **How it is tested:** `test_facilities_data_manager_search.py`, `test_facilities_logic_manager_summary.py`, `test_facility_summary_domain.py`, `test_facilities_workflow_integration.py`, the `FacilitiesSummaryRuleTests` in `test_logic_manager_rules.py`, the search/summary tests in `test_io_manager_cli.py`, and end-to-end tests in `test_application_workflow.py`.
 
@@ -166,17 +166,17 @@ Reporter name and contact are excluded from the prompt, and recognisable names, 
 
 `DataManager` depends on the abstract `IncidentRepository` contract, not on SQL statements. Both `JsonIncidentRepository` and `SQLiteIncidentRepository` implement it, so the backend is chosen in `.env` without changing any other code.
 
-| SQLite capability | Implementation |
-| --- | --- |
-| ➕ **Create** | Insert a validated incident and allocate a persistent incident ID in one transaction. |
-| 🔍 **Read** | Load and validate stored records. |
-| ✏️ **Update** | Persist modified records, including status and audit history. |
-| 🗑️ **Delete** | Remove a selected record through `DataManager.delete()`. |
-| 💾 **Persistence** | Data and the ID counter survive restarts; deleted IDs are never reused. |
-| 🔒 **Transactions** | Parameterised SQL with `BEGIN IMMEDIATE` to prevent concurrent ID collisions. |
-| 🗃️ **Backup / restore** | Consistent backups via the SQLite backup API; integrity-checked before restoring. |
-| 🔄 **Migration** | `import_records()` imports existing JSON records into an empty SQLite database. |
-| ⚠️ **Error handling** | Corrupt files or records raise `DataStoreError` instead of being silently discarded. |
+| SQLite capability       | Implementation                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------- |
+| ➕ **Create**           | Insert a validated incident and allocate a persistent incident ID in one transaction. |
+| 🔍 **Read**             | Load and validate stored records.                                                     |
+| ✏️ **Update**           | Persist modified records, including status and audit history.                         |
+| 🗑️ **Delete**           | Remove a selected record through `DataManager.delete()`.                              |
+| 💾 **Persistence**      | Data and the ID counter survive restarts; deleted IDs are never reused.               |
+| 🔒 **Transactions**     | Parameterised SQL with `BEGIN IMMEDIATE` to prevent concurrent ID collisions.         |
+| 🗃️ **Backup / restore** | Consistent backups via the SQLite backup API; integrity-checked before restoring.     |
+| 🔄 **Migration**        | `import_records()` imports existing JSON records into an empty SQLite database.       |
+| ⚠️ **Error handling**   | Corrupt files or records raise `DataStoreError` instead of being silently discarded.  |
 
 The default file is `hazardreports.sqlite3` (in `HAZARD_DATA_DIR`, or the project folder). The `incidents(incident_id, payload)` table stores each serialised incident, including `status_history` and `ai_review_history`; `metadata(key, value)` stores the ID counter.
 
@@ -206,28 +206,26 @@ A separate `migrate_json_to_sqlite.py` command-line script is not included or re
 
 **Verification:** submit a review for a case with a complete saved AI assessment, reload the case and verify the feedback history persists while the original AI result remains unchanged. Confirm that an empty reason/invalid reviewer name is rejected without clearing valid form input. Automated coverage is included in `test_data_repositories.py` and `test_hazard_report_domain.py`; verify live form behaviour in a browser.
 
-> **Scope:** reviewer names remain self-entered and are **not verified against the signed-in username**. The dashboard has a basic sign-in gate, but is still a local educational prototype rather than a production approval system.
+> **Scope:** reviewer names are self-entered, **not authenticated**; the current dashboard is a local educational prototype, not a production approval system.
 
 ### 7.4 🖥️ Streamlit dashboard and threaded CSV export
 
-**Implementation:** `campus_safety/dashboard/` — `dashboard_oop.py` (`IncidentDashboard` and login entry check), `dashboard_auth.py` (`DashboardAuth`), `dashboard_extensions.py` (presentation helpers) and `background_export_service.py` (`BackgroundExportService`).
-
-**Dashboard authentication:** `DashboardAuth.from_env().require_login()` runs before rendering dashboard content. Until a correct username/password is submitted, Streamlit displays a **Campus Safety Operations** sign-in form. Once signed in, the username is stored in Streamlit session state and a **Log out** button is displayed in the sidebar. Logging out clears that session value. Configure `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` in `.env` (Section 8.3); the fallback values for this prototype are `admin` and `admin123`. **Change the defaults before demonstrating, sharing or deploying.** This is a basic, session-based login, not production-grade identity management.
+**Implementation:** `campus_safety/dashboard/` — `dashboard_oop.py` (`IncidentDashboard`), `dashboard_extensions.py` (presentation helpers) and `background_export_service.py` (`BackgroundExportService`).
 
 The dashboard is organised into four navigation pages:
 
-| Page | Features |
-| --- | --- |
-| **Overview** | Total, active, high-priority and resolved counters; priority queue; workload-by-status chart; recently reported incidents. Summaries can auto-refresh every 15 seconds. |
-| **Incidents** | Search, status/priority/category/date filters, sorting and pagination; inspect case details and image evidence; update status, save human AI reviews, view both histories, or delete a case with confirmation. |
-| **Insights** | Incident category, severity and priority charts; monthly reporting trend; frequently reported locations. |
-| **Data & backups** | Prepare incident CSV exports in a worker thread; download CSV/TXT; list and restore available repository backups after confirmation. |
+| Page               | Features                                                                                                                                                                                                       |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Overview**       | Total, active, high-priority and resolved counters; priority queue; workload-by-status chart; recently reported incidents. Summaries can auto-refresh every 15 seconds.                                        |
+| **Incidents**      | Search, status/priority/category/date filters, sorting and pagination; inspect case details and image evidence; update status, save human AI reviews, view both histories, or delete a case with confirmation. |
+| **Insights**       | Incident category, severity and priority charts; monthly reporting trend; frequently reported locations.                                                                                                       |
+| **Data & backups** | Prepare incident CSV exports in a worker thread; download CSV/TXT; list and restore available repository backups after confirmation.                                                                           |
 
 `IncidentDashboard` receives a `DataManager` and does not access SQL or Gemini directly. The dashboard and CLI therefore reuse the same persistence, validation and incident domain logic. `BackgroundExportService` uses a `ThreadPoolExecutor` to produce a CSV from an incident snapshot without blocking the rest of the dashboard.
 
 The dashboard displays **Singapore time (SGT)** where timestamps are shown. Auto-refresh is limited to Overview and Insights; incident forms deliberately do not refresh every 15 seconds to avoid interrupting edits. Charts and controls use a high-contrast light presentation theme, including readable white text on blue primary action buttons.
 
-> **Security scope:** The new sign-in form limits dashboard access within a Streamlit session, but it does not provide production-grade user management or verified reviewer identities. Reviewer names are self-entered, and status audit entries are application-level history rather than tamper-proof security logs. Do not expose the dashboard publicly or use real personal information for demonstration data.
+> **Security scope:** This is a local prototype, not an authenticated operational deployment. A reviewer name is self-entered, and status audit entries are application-level history rather than tamper-proof security logs. Do not expose the dashboard publicly or use real personal information for demonstration data.
 
 ### 7.5 ✨ Live status and AI-review forms (November 2026 update)
 
@@ -235,13 +233,13 @@ The dashboard displays **Singapore time (SGT)** where timestamps are shown. Auto
 
 These are **interface-level improvements** to existing `DataManager` operations. No repository schema, priority rules or saved Gemini assessment fields are changed.
 
-| Form / field | Interaction before saving | After a successful save | Invalid or unsuccessful save |
-| --- | --- | --- | --- |
-| **New status** | Dropdown selection shows an immediate preview, e.g. `In Progress → Resolved (not saved yet)`. | Reflects the newly stored status. | Selected status is retained for correction. |
-| **Reason for change** | Required for a genuine status change. | Text box clears on the next rerun. | Entered text remains available. |
-| **Review decision** | Dropdown shows the selected `Accepted`, `Flagged as Incorrect`, or `Further Review Requested` decision immediately. | Resets to the first supported option (`Accepted`). | Selected decision remains available. |
-| **Reviewer name** | Required (at least two non-whitespace characters). | Text box clears on the next rerun. | Entered text remains available. |
-| **Review reason** | Required for a saved human AI review. | Text box clears on the next rerun. | Entered text remains available. |
+| Form / field          | Interaction before saving                                                                                           | After a successful save                            | Invalid or unsuccessful save                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------- |
+| **New status**        | Dropdown selection shows an immediate preview, e.g. `In Progress → Resolved (not saved yet)`.                       | Reflects the newly stored status.                  | Selected status is retained for correction. |
+| **Reason for change** | Required for a genuine status change.                                                                               | Text box clears on the next rerun.                 | Entered text remains available.             |
+| **Review decision**   | Dropdown shows the selected `Accepted`, `Flagged as Incorrect`, or `Further Review Requested` decision immediately. | Resets to the first supported option (`Accepted`). | Selected decision remains available.        |
+| **Reviewer name**     | Required (at least two non-whitespace characters).                                                                  | Text box clears on the next rerun.                 | Entered text remains available.             |
+| **Review reason**     | Required for a saved human AI review.                                                                               | Text box clears on the next rerun.                 | Entered text remains available.             |
 
 **How it works:**
 
@@ -269,27 +267,27 @@ The relevant UI state keys are scoped by incident ID (`cs_status_*_{incident_id}
 ```powershell
 git clone https://github.com/2603229/INF1103_P3_T4_PART2.git
 cd INF1103_P3_T4_PART2
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-notepad .env          # add your Gemini key and change the dashboard username/password
+# Optional: Copy-Item .env.example .env
+# For real incident submissions, set GEMINI_API_KEY in your environment or .env.
 python -m unittest discover -s tests -t . -v
-python main.py                                                   # CLI
-python -m streamlit run campus_safety/dashboard/dashboard_oop.py # dashboard (second terminal)
+python main.py                          # launches dashboard + CLI together
+# Optional alternatives:
+python main.py --cli-only               # CLI without dashboard
+python main.py --no-browser             # both, without automatic browser opening
+python -m streamlit run dashboard.py    # dashboard only
 ```
 
-The dashboard opens at **http://localhost:8501** and first shows the sign-in form. Use the credentials set in `.env`, then select **Log out** from the sidebar when finished. Always start it from the project root with `python -m streamlit` so the `campus_safety` package can be imported. To use both interfaces together, run the CLI and Streamlit dashboard in **separate PowerShell terminals**. Keep `HAZARD_STORAGE_BACKEND` and the database path consistent across both.
+Run **only `python main.py`** in the project root. The dashboard starts automatically, and your browser opens at **http://localhost:8501** (or another available local port if 8501 is occupied). The CLI remains interactive in the same terminal. Both processes share environment settings and the same database. **When you exit the CLI, the dashboard server stops as well.** If a browser does not open, use the URL printed in the terminal. `DASHBOARD_PORT` optionally fixes the dashboard port; an explicit occupied port generates a warning rather than redirecting to a different service. The optional `.env` applies to both interfaces. Without it, both use JSON storage by default; a Gemini API key is required only for real AI-assessed report submissions. If Streamlit is not installed, the CLI continues and displays installation instructions. A virtual environment is not required.
 
-If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process Bypass` in that terminal and try again. SQLite is part of Python's standard library; do **not** install a separate `sqlite3` package.
+A virtual environment is optional; it is not required for these commands. SQLite is part of Python's standard library; do **not** install a separate `sqlite3` package.
 
 ### 8.2 🐳 Docker
 
 Requires Docker Desktop to be running. No local Python installation is needed.
 
 ```powershell
-# Build the image (from the repository root; rebuild whenever the code changes)
+# Build the image (from the repository root)
 docker build -t campus-safety .
 
 # Run the automated tests inside the container (no API key needed)
@@ -298,33 +296,30 @@ docker run --rm campus-safety python -m unittest discover -s tests -t . -v
 # Run the interactive CLI with persistent records and shared image evidence
 docker run -it --rm --env-file .env `
   -v campus-safety-data:/data `
-  -v "${PWD}\uploads:/app/uploads:ro" `
+  -v "${PWD}\uploads:/app/uploads:rw" `
   campus-safety
 
 # Run the dashboard using the same database volume and uploaded images
 docker run --rm -p 8501:8501 --env-file .env `
   -v campus-safety-data:/data `
   -v "${PWD}\uploads:/app/uploads:ro" `
-  campus-safety python -m streamlit run campus_safety/dashboard/dashboard_oop.py --server.address=0.0.0.0
+  campus-safety python -m streamlit run dashboard.py --server.address=0.0.0.0
 ```
 
-Open **http://localhost:8501** to access the Docker dashboard. The same `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` values are passed into Docker with `--env-file .env`, so the sign-in form should also appear there. **If Docker shows an outdated dashboard without the login form, stop the old container, rebuild the image** (`docker build --no-cache -t campus-safety .`) **and run it again.** An incognito window helps confirm that the page is not using an existing authenticated session.
-
-Inside Docker, the default database is stored under `/data` (`HAZARD_DATA_DIR=/data`), and the named `campus-safety-data` volume preserves it between CLI and dashboard runs. Leave `SQLITE_DB_PATH` / `INCIDENTS_DB` unset or point them **inside `/data`**; a custom path outside `/data` may not persist in this volume. Both Docker commands bind-mount the project's local `uploads/` directory at `/app/uploads` (read-only), so the CLI and dashboard can access the same evidence files. Create `uploads/` locally before running Docker and enter a **container path**, e.g. `/app/uploads/wet_floor.jpg`, when the CLI asks for an image; a Windows `C:\...` path is not valid inside Docker. Git and Docker ignore local uploads by default, so image files are not bundled into the image. `.env` is excluded from the image by `.dockerignore` and supplied at runtime via `--env-file`. The graphical image picker is unavailable in the container; the CLI asks for a file path instead.
+Inside Docker, the default database is stored under `/data` (`HAZARD_DATA_DIR=/data`), and the named `campus-safety-data` volume preserves it between CLI and dashboard runs. Leave `SQLITE_DB_PATH` / `INCIDENTS_DB` unset or point them **inside `/data`**; a custom path outside `/data` may not persist in this volume. Both Docker commands bind-mount the project's local `uploads/` directory at `/app/uploads` (read/write for the CLI so it can copy new evidence; read-only for the dashboard). Create `uploads/` locally before running Docker and enter a **container path**, e.g. `/app/uploads/wet_floor.jpg`, when the CLI asks for an image; a Windows `C:\...` path is not valid inside Docker. Git and Docker ignore local uploads by default, so image files are not bundled into the image. `.env` is excluded from the image by `.dockerignore` and supplied at runtime via `--env-file`. The graphical image picker is unavailable in the container; the CLI asks for a file path instead.
 
 ### 8.3 🔐 Configuration (`.env`)
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `GEMINI_API_KEY` | Gemini credentials (required for real submissions) | — |
-| `GEMINI_MODELS` | Comma-separated model fallback order | Built-in list in `gemini_assessor.py` |
-| `HAZARD_STORAGE_BACKEND` | `json` or `sqlite` | `json` when unset; `.env.example` selects `sqlite` |
-| `SQLITE_DB_PATH` / `INCIDENTS_DB` | Optional custom SQLite / JSON file path | Under `HAZARD_DATA_DIR` when unset |
-| `HAZARD_DATA_DIR` | Shared data folder for either backend | Project folder (`/data` in Docker) |
-| `DASHBOARD_USERNAME` | Username for the Streamlit login form | `admin` (prototype fallback only) |
-| `DASHBOARD_PASSWORD` | Password for the Streamlit login form | `admin123` (prototype fallback only) |
+| Variable                          | Purpose                                            | Default                                            |
+| --------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
+| `GEMINI_API_KEY`                  | Gemini credentials (required for real submissions) | —                                                  |
+| `GEMINI_MODELS`                   | Comma-separated model fallback order               | Built-in list in `gemini_assessor.py`              |
+| `HAZARD_STORAGE_BACKEND`          | `json` or `sqlite`                                 | `json` when unset; `.env.example` selects `sqlite` |
+| `SQLITE_DB_PATH` / `INCIDENTS_DB` | Optional custom SQLite / JSON file path            | Under `HAZARD_DATA_DIR` when unset                 |
+| `HAZARD_DATA_DIR`                 | Shared data folder for either backend              | Project folder (`/data` in Docker)                 |
+| `DASHBOARD_PORT`                  | Local dashboard port for `python main.py`          | `8501` (automatic fallback when occupied)          |
 
-Copy `.env.example` to `.env`, then **replace the sample dashboard credentials with a unique username and strong password** before running either the local or Docker dashboard. The login is separate from the CLI and does not authenticate self-entered reviewer names. Never commit `.env`, share your API key/password or show secrets in screenshots. Changing the backend does **not** transfer existing records. Use **fictional test data** when demonstrating the application.
+Never commit `.env`, share your key or show it in screenshots. Changing the backend does **not** transfer existing records. Use **fictional test data** when demonstrating the application.
 
 ### 8.4 🎨 Optional Streamlit theme
 
@@ -343,54 +338,55 @@ font = "sans serif"
 
 Streamlit can run without this file, but **keep the included version** for consistent contrast. Its location is **`<project root>/.streamlit/config.toml`**, not inside `campus_safety/dashboard/`.
 
-
 ## 9. ✅ Automated tests and CI
 
-**Previously reported local results on 16 November 2026 (before the dashboard login tests were included):** **233/233 `unittest` tests passed**, with zero failures or errors; the focused **AI Manager runner passed 51/51**. The 51 AI tests are included within the previously verified 233, so these totals must **not** be added together. The five newly added dashboard authentication tests are listed separately below; do not claim an updated full-suite pass total without running the updated suite. Offline tests use stubbed AI responses and temporary repositories and do not require a live Gemini API key.
+**Verified on 16 November 2026 for this integrated package:** **257/257 `unittest` tests passed**, including four new shared CLI/dashboard JSON/SQLite checks; the focused AI Manager runner is a subset of this full test suite, not an additional set of tests. Offline tests use stubbed AI responses and temporary repositories and do not require a live Gemini API key.
 
 ```powershell
-python -m compileall -q main.py campus_safety tests
-python -m unittest discover -s tests -t . -v    # full suite: 233 tests
+python -m compileall -q main.py dashboard.py campus_safety tests
+python -m unittest discover -s tests -t . -v    # full suite: 250 tests
 python -m tests.run_all_tests                    # grouped full-suite summary
 python -m tests.run_ai_tests                     # overlapping AI subset: 51 tests
 ```
 
 ### 9.1 Test coverage in this project version
 
-| Area / test module | Tests | Main coverage |
-| --- | ---: | --- |
-| AI Manager (`tests/ai_manager_test/`, six modules) | 51 | Schema validation, provider abstraction, Gemini retries/fallback, prompts and image validation |
-| `test_logic_manager_rules.py` | 29 | Priority rules, severity/impact scoring, history, duplicate matching, OOP substitution |
-| `test_data_repositories.py` | 50 | JSON/SQLite CRUD, status audit, AI review, migrations, persistence, backups and corruption |
-| `test_hazard_report_domain.py` | 17 | Domain validation, incident state changes, AI review rules |
-| `test_io_manager_cli.py` | 14 | CLI, validation loops, search criteria and facilities output |
-| `test_application_workflow.py` | 22 | End-to-end submission, cancellation, failure handling and menu routes |
-| `test_facilities_data_manager_search.py` | 10 | Incident filters and searches |
-| `test_facilities_logic_manager_summary.py` | 2 | Facilities summaries |
-| `test_facilities_workflow_integration.py` | 1 | Integrated facilities search/summary |
-| `test_facility_summary_domain.py` | 2 | Facility summary result validation |
-| `test_incident_exporter.py` | 4 | Exporter behaviour |
-| `test_background_export_service.py` | 9 | Threaded export service and task handling |
-| `test_dashboard_extensions.py` | 22 | Dashboard presentation/helper logic |
-| `test_dashboard_auth.py` | 5 | Default/overridden credentials, failed logins, case sensitivity and username whitespace |
-| **Previously verified `unittest` tests** | **233** | **233 passed before the dashboard login tests were added; rerun the full suite to confirm the new total** |
+| Area / test module                                 |   Tests | Main coverage                                                                                  |
+| -------------------------------------------------- | ------: | ---------------------------------------------------------------------------------------------- |
+| AI Manager (`tests/ai_manager_test/`, six modules) |      51 | Schema validation, provider abstraction, Gemini retries/fallback, prompts and image validation |
+| `test_logic_manager_rules.py`                      |      29 | Priority rules, severity/impact scoring, history, duplicate matching, OOP substitution         |
+| `test_data_repositories.py`                        |      50 | JSON/SQLite CRUD, status audit, AI review, migrations, persistence, backups and corruption     |
+| `test_hazard_report_domain.py`                     |      17 | Domain validation, incident state changes, AI review rules                                     |
+| `test_io_manager_cli.py`                           |      14 | CLI, validation loops, search criteria and facilities output                                   |
+| `test_application_workflow.py`                     |      30 | End-to-end submission, cancellation, failure handling and menu routes                          |
+| `test_facilities_data_manager_search.py`           |      10 | Incident filters and searches                                                                  |
+| `test_facilities_logic_manager_summary.py`         |       2 | Facilities summaries                                                                           |
+| `test_facilities_workflow_integration.py`          |       1 | Integrated facilities search/summary                                                           |
+| `test_facility_summary_domain.py`                  |       2 | Facility summary result validation                                                             |
+| `test_incident_exporter.py`                        |       4 | Exporter behaviour                                                                             |
+| `test_background_export_service.py`                |       9 | Threaded export service and task handling                                                      |
+| `test_dashboard_extensions.py`                     |      22 | Dashboard presentation/helper logic                                                            |
+| `test_dashboard_auth.py`                           |       5 | Dashboard credential checking                                                                  |
+| `test_integrated_project.py`                       |       4 | Shared environment + CLI-to-dashboard workflow across JSON and SQLite                          |
+| `test_single_command_launcher.py`                  |       7 | Single-command launch and subprocess cleanup (offline mocks)                                   |
+| **Total `unittest` tests**                         | **250** | **250 passed in this verification**                                                            |
 
-`tests/test_io_manager.py` contains **three separate pytest-style checks**, not collected by `unittest` discovery and therefore **excluded** from the 233-test total. To execute them separately, install `pytest` and run `python -m pytest tests/test_io_manager.py -v`; `pytest` is not listed in the runtime `requirements.txt`.
+`tests/test_io_manager.py` contains **three separate pytest-style checks**, not collected by `unittest` discovery and therefore **excluded** from the 250-test total. To execute them separately, install `pytest` and run `python -m pytest tests/test_io_manager.py -v`; `pytest` is not listed in the runtime `requirements.txt`.
 
-**Browser verification is separate:** `test_dashboard_auth.py` checks login credential matching without launching Streamlit; it does not verify the actual browser login flow. Manually verify the sign-in form appears locally and in Docker, invalid credentials are rejected, successful sign-in unlocks the dashboard, **Log out** returns to the sign-in form, Streamlit rendering, live selectbox previews, button contrast and the field-clearing behaviour described in Section 7.5. The local test results above do **not** establish Docker startup or successful GitHub-hosted CI runs.
+**Browser verification is separate:** the automated dashboard tests primarily cover helper logic and export services. Manually verify Streamlit rendering, live selectbox previews, button contrast and the field-clearing behaviour described in Section 7.5. The local test results above do **not** establish Docker startup or successful GitHub-hosted CI runs.
 
 **CI configuration:** `.github/workflows/python-tests.yml` runs on pushes to `main` and `feature/**`, and pull requests to `main`. The `basic-checks` job checks essential files, compiles Python, installs dependencies, runs AI tests, imports the dashboard and runs the complete `unittest` suite. The `docker` job builds the image, runs the same suite in the container and smoke-tests the CLI using menu option 6. **Review GitHub Actions results separately** before claiming CI/Docker success in the engineering report.
 
 ## 10. ⚠️ Exception handling
 
-| Exception | Raised by | Typical cause | Handled by | Outcome |
-| --- | --- | --- | --- | --- |
-| `InvalidRecord` (`ValueError`) | `HazardReport`, `AIAssessment`, audit/review entries | Invalid input, AI schema mismatch, invalid status change | `GeminiAssessor` (retries), `CampusSafetyApplication.submit_report()` | Error message; report not saved |
-| `AssessmentUnavailable` (`RuntimeError`) | `GeminiAssessor`, `AIManager`, `ImageEvidenceProcessor` | Missing key, network failure, timeout, malformed JSON after retries, invalid image | `CampusSafetyApplication.submit_report()` | "AI assessment unavailable… NOT saved"; menu continues |
-| `DataStoreError` (`RuntimeError`) | JSON and SQLite repositories, `IncidentExporter` | Corrupt or unreadable file, SQLite error, duplicate ID, failed backup | `main.py` at startup; `CampusSafetyApplication.run()` / `submit_report()` | Clear message, exit code 1 at startup; damaged files are never overwritten |
-| `ValueError` | `create_repository()` | Unsupported `HAZARD_STORAGE_BACKEND` value | `main.py` | Startup error, exit code 1 |
-| `OSError` | `MediaHandler.attach_image()` | Image cannot be copied | `MediaHandler` | Continues without the image |
-| `KeyboardInterrupt` / `EOFError` | User presses Ctrl+C or input closes | — | `CampusSafetyApplication.run()` | Goodbye message, clean exit |
+| Exception                                | Raised by                                               | Typical cause                                                                      | Handled by                                                                | Outcome                                                                    |
+| ---------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `InvalidRecord` (`ValueError`)           | `HazardReport`, `AIAssessment`, audit/review entries    | Invalid input, AI schema mismatch, invalid status change                           | `GeminiAssessor` (retries), `CampusSafetyApplication.submit_report()`     | Error message; report not saved                                            |
+| `AssessmentUnavailable` (`RuntimeError`) | `GeminiAssessor`, `AIManager`, `ImageEvidenceProcessor` | Missing key, network failure, timeout, malformed JSON after retries, invalid image | `CampusSafetyApplication.submit_report()`                                 | "AI assessment unavailable… NOT saved"; menu continues                     |
+| `DataStoreError` (`RuntimeError`)        | JSON and SQLite repositories, `IncidentExporter`        | Corrupt or unreadable file, SQLite error, duplicate ID, failed backup              | `main.py` at startup; `CampusSafetyApplication.run()` / `submit_report()` | Clear message, exit code 1 at startup; damaged files are never overwritten |
+| `ValueError`                             | `create_repository()`                                   | Unsupported `HAZARD_STORAGE_BACKEND` value                                         | `main.py`                                                                 | Startup error, exit code 1                                                 |
+| `OSError`                                | `MediaHandler.attach_image()`                           | Image cannot be copied                                                             | `MediaHandler`                                                            | Continues without the image                                                |
+| `KeyboardInterrupt` / `EOFError`         | User presses Ctrl+C or input closes                     | —                                                                                  | `CampusSafetyApplication.run()`                                           | Goodbye message, clean exit                                                |
 
 A missing database file is not an error: it is treated as an empty database and created on the first save.
 
@@ -398,21 +394,21 @@ A missing database file is not an error: it is treated as an empty database and 
 
 Use the mappings below as the code-to-report source of truth. Keep the 6-page report's UML, data-flow diagram, SQLite description and exception matrix aligned with these methods.
 
-| Report element | Exact code mapping |
-| --- | --- |
-| UML: controller and managers | [`CampusSafetyApplication.create_default()` and `__init__()`](./campus_safety/application.py) construct and hold `IOManager`, `AIManager`, `LogicManager` and `DataManager`. |
+| Report element                            | Exact code mapping                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UML: controller and managers              | [`CampusSafetyApplication.create_default()` and `__init__()`](./campus_safety/application.py) construct and hold `IOManager`, `AIManager`, `LogicManager` and `DataManager`.                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | UML: provider and repository abstractions | [`AIManager.__init__()`](./campus_safety/ai_manager/ai_manager.py) depends on `AssessmentProvider`, implemented by [`GeminiAssessor`](./campus_safety/ai_manager/gemini_assessor.py). [`DataManager.__init__()`](./campus_safety/data_manager/data_manager.py) depends on `IncidentRepository`, implemented by [`JsonIncidentRepository`](./campus_safety/data_manager/json_incident_repository.py) and [`SQLiteIncidentRepository`](./campus_safety/data_manager/sqlite_incident_repository.py). `IOManager.__init__()` creates its `MediaHandler` from [`media.py`](./campus_safety/io_manager/media.py). |
-| UML: logic and export collaborators | [`LogicManager.__init__()`](./campus_safety/logic_manager/logic_manager.py) holds its evaluator, sorter, optional matcher and summary builder; `DataManager.__init__()` creates an `IncidentExporter`. |
-| New-report data flow | [`CampusSafetyApplication.submit_report()`](./campus_safety/application.py) calls `IOManager.get_user_input()` → `CampusSafetyApplication.assess()` → `AIManager.assess()` → `AssessmentProvider.assess()`; then `CampusSafetyApplication.evaluate()` calls `LogicManager.calculate_historical_frequency()`, `check_duplicate()` and `evaluate()`, applies the `Decision` to `HazardReport`, and `DataManager.save()` delegates to `IncidentRepository.save()`. |
-| SQLite schema | [`SQLiteIncidentRepository.__init__()`](./campus_safety/data_manager/sqlite_incident_repository.py) creates `incidents(incident_id TEXT PRIMARY KEY, payload TEXT NOT NULL)` and `metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)`. Each payload serializes one report, including status and AI-review histories; `metadata.last_issued` preserves the ID counter. |
-| SQLite transactions | [`SQLiteIncidentRepository.save()`](./campus_safety/data_manager/sqlite_incident_repository.py) uses `BEGIN IMMEDIATE` to allocate the ID, insert the payload and update the counter atomically. `replace_all()` backs up first, starts an immediate transaction, validates the current rows and concurrent-change snapshot, then applies inserts/updates/deletes and updates the counter. `get_by_id()` queries the `incident_id` primary key directly. |
+| UML: logic and export collaborators       | [`LogicManager.__init__()`](./campus_safety/logic_manager/logic_manager.py) holds its evaluator, sorter, optional matcher and summary builder; `DataManager.__init__()` creates an `IncidentExporter`.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| New-report data flow                      | [`CampusSafetyApplication.submit_report()`](./campus_safety/application.py) calls `IOManager.get_user_input()` → `CampusSafetyApplication.assess()` → `AIManager.assess()` → `AssessmentProvider.assess()`; then `CampusSafetyApplication.evaluate()` calls `LogicManager.calculate_historical_frequency()`, `check_duplicate()` and `evaluate()`, applies the `Decision` to `HazardReport`, and `DataManager.save()` delegates to `IncidentRepository.save()`.                                                                                                                                             |
+| SQLite schema                             | [`SQLiteIncidentRepository.__init__()`](./campus_safety/data_manager/sqlite_incident_repository.py) creates `incidents(incident_id TEXT PRIMARY KEY, payload TEXT NOT NULL)` and `metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)`. Each payload serializes one report, including status and AI-review histories; `metadata.last_issued` preserves the ID counter.                                                                                                                                                                                                                                      |
+| SQLite transactions                       | [`SQLiteIncidentRepository.save()`](./campus_safety/data_manager/sqlite_incident_repository.py) uses `BEGIN IMMEDIATE` to allocate the ID, insert the payload and update the counter atomically. `replace_all()` backs up first, starts an immediate transaction, validates the current rows and concurrent-change snapshot, then applies inserts/updates/deletes and updates the counter. `get_by_id()` queries the `incident_id` primary key directly.                                                                                                                                                    |
 
-| Exception scenario | Origin and propagation | Handling / outcome |
-| --- | --- | --- |
-| Gemini API unavailable | [`GeminiAssessor.assess()`](./campus_safety/ai_manager/gemini_assessor.py) reports a missing key immediately; API errors are retried and then become `AssessmentUnavailable`. `AIManager.assess()` propagates provider failures. | [`CampusSafetyApplication.submit_report()`](./campus_safety/application.py) displays the assessment error and does not save the report. |
-| Malformed Gemini JSON | `GeminiAssessor.parse_response()` raises `InvalidRecord` for malformed JSON. During `GeminiAssessor.assess()`, it is treated as a failed attempt; after retries the provider raises `AssessmentUnavailable`. | `CampusSafetyApplication.submit_report()` catches the assessment/validation exception and does not save the report. |
-| Corrupt SQLite database or payload | [`SQLiteIncidentRepository.__init__()` and `load()`](./campus_safety/data_manager/sqlite_incident_repository.py) validate the database and payloads and raise `DataStoreError` on corruption. | [`main.main()`](./main.py) reports startup failure and exits with code 1; at runtime `CampusSafetyApplication.run()` displays a database-unavailable error. |
-| Invalid user input | [`IOManager.get_user_input()`](./campus_safety/io_manager/io_manager.py) uses `InputValidator` to reprompt; [`HazardReport.from_input()`](./campus_safety/domain/hazard_report.py) raises `InvalidRecord` if domain validation fails. | `CampusSafetyApplication.submit_report()` displays an invalid-report error and returns without saving. |
+| Exception scenario                 | Origin and propagation                                                                                                                                                                                                                | Handling / outcome                                                                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gemini API unavailable             | [`GeminiAssessor.assess()`](./campus_safety/ai_manager/gemini_assessor.py) reports a missing key immediately; API errors are retried and then become `AssessmentUnavailable`. `AIManager.assess()` propagates provider failures.      | [`CampusSafetyApplication.submit_report()`](./campus_safety/application.py) displays the assessment error and does not save the report.                     |
+| Malformed Gemini JSON              | `GeminiAssessor.parse_response()` raises `InvalidRecord` for malformed JSON. During `GeminiAssessor.assess()`, it is treated as a failed attempt; after retries the provider raises `AssessmentUnavailable`.                          | `CampusSafetyApplication.submit_report()` catches the assessment/validation exception and does not save the report.                                         |
+| Corrupt SQLite database or payload | [`SQLiteIncidentRepository.__init__()` and `load()`](./campus_safety/data_manager/sqlite_incident_repository.py) validate the database and payloads and raise `DataStoreError` on corruption.                                         | [`main.main()`](./main.py) reports startup failure and exits with code 1; at runtime `CampusSafetyApplication.run()` displays a database-unavailable error. |
+| Invalid user input                 | [`IOManager.get_user_input()`](./campus_safety/io_manager/io_manager.py) uses `InputValidator` to reprompt; [`HazardReport.from_input()`](./campus_safety/domain/hazard_report.py) raises `InvalidRecord` if domain validation fails. | `CampusSafetyApplication.submit_report()` displays an invalid-report error and returns without saving.                                                      |
 
 ## 11. 🗂️ Project structure
 
@@ -426,29 +422,29 @@ INF1103_P3_T4_PART2/
 ├── campus_safety/
 │   ├── __init__.py
 │   ├── application.py                 # Coordinates IO → AI → Logic → Data
+│   ├── runtime.py                     # Shared .env and datastore bootstrap
 │   ├── domain/                        # HazardReport, Decision, schema and audit/review entities
 │   ├── io_manager/                    # IOManager, input validation and media handling
 │   ├── ai_manager/                    # AI providers, assessment, Gemini prompt and image helpers
 │   ├── logic_manager/                 # Scorers, priority rules, routing and facilities summary
 │   ├── data_manager/                  # JSON/SQLite repositories, storage, export and factory
 │   └── dashboard/
-│       ├── dashboard_oop.py           # Streamlit dashboard, login gate, live previews and forms
-│       ├── dashboard_auth.py          # Session sign-in/sign-out and env-based credentials
+│       ├── dashboard_oop.py           # Streamlit dashboard, live previews and clear-on-save forms
 │       ├── dashboard_extensions.py    # Dashboard presentation helpers
 │       ├── background_export_service.py
-│       ├── README_INTEGRATION.md      # Dashboard's earlier integration notes
+│       ├── README_INTEGRATION.md      # Updated merged-project launch guide
 │       └── optional_theme/
 ├── tests/
 │   ├── __init__.py
 │   ├── ai_manager_test/               # AI Manager unit tests and stub providers
 │   ├── test_application_workflow.py
 │   ├── test_background_export_service.py
-│   ├── test_dashboard_auth.py         # Dashboard credential validation (5 tests)
 │   ├── test_dashboard_extensions.py
 │   ├── test_data_repositories.py
 │   ├── test_hazard_report_domain.py
-│   ├── test_io_manager.py            # Three pytest checks (not in the 233 unittest tests)
+│   ├── test_io_manager.py            # Three additional pytest checks
 │   ├── test_io_manager_cli.py
+│   ├── test_integrated_project.py     # Four real-backend CLI/dashboard integration tests
 │   ├── test_logic_manager_rules.py
 │   ├── test_facilities_data_manager_search.py
 │   ├── test_facilities_logic_manager_summary.py
@@ -458,7 +454,8 @@ INF1103_P3_T4_PART2/
 │   ├── run_all_tests.py              # Grouped full-suite results
 │   └── run_ai_tests.py               # Focused AI subset
 ├── .streamlit/config.toml             # Included native Streamlit light theme
-├── main.py                            # CLI entry point
+├── main.py                            # Starts dashboard and CLI in one command
+├── dashboard.py                       # Root Streamlit entry point
 ├── Dockerfile
 ├── .dockerignore
 ├── .gitignore
@@ -467,20 +464,19 @@ INF1103_P3_T4_PART2/
 └── README.md
 ```
 
-
 ## 12. 🧱 OOP implementation guide
 
-| Concept | Where it is implemented | Evidence |
-| --- | --- | --- |
-| 🧱 **Classes and objects** | Managers, `CampusSafetyApplication`, `HazardReport`, `AIAssessment`, `Decision`, repositories, rules, scorers | Objects collaborate to assess, prioritise and store incidents. |
-| 🔐 **Encapsulation** | `HazardReport`, managers, repositories, `PriorityRule` | Underscore-prefixed attributes (`_fields`, `_repository`, `_provider`); `HazardReport.get()` / `as_dict()` return deep copies; state changes go through validated methods. `PriorityRule` exposes read-only properties. |
-| 🧩 **Abstract classes** | `AssessmentProvider`, `IncidentRepository`, `PriorityRule`, `Scorer`, `TextMatcher` | Each extends `ABC` with `@abstractmethod` operations. `IncidentRepository.replace_all()` also provides shared validation; `TableScorer` is an intermediate abstract class. |
-| 📜 **Interfaces / contracts** | The same ABCs | Clients depend on the contract, not on a specific implementation. |
-| 🌳 **Inheritance and overriding** | `GeminiAssessor`; `JsonIncidentRepository`, `SQLiteIncidentRepository`; `CriticalRule`, `HighRule`, `StandardRule`; `SeverityScorer`, `ImpactScorer`, `FrequencyScorer`; `ExactMatcher`, `FuzzyMatcher`; `InvalidRecord`, `DataStoreError`, `AssessmentUnavailable` | Subclasses override `assess`, `matches`, `score` and `replace_all`. Repositories call `super().replace_all()`; rules call `super().__init__()`. |
-| 🔄 **Polymorphism** | `AIManager` → any `AssessmentProvider`; `DataManager` → any `IncidentRepository`; `PriorityEvaluator` loops over `PriorityRule`s; `ScoreCalculator` loops over `Scorer`s; `IncidentHistory` → any `TextMatcher` | The same call works on different concrete classes with no type checks. Tests swap Gemini for `ConstantProvider`/`StubProvider`, SQLite for JSON, and `FuzzyMatcher` for `ExactMatcher`. |
-| 🔗 **Association** | `HazardReport` ↔ `AIAssessment` / `Decision`; `IOManager` ↔ `HazardReport` | Objects use each other in method calls (`attach_assessment()`, `apply_decision()`, `submission_success()`) without keeping or owning them. |
-| 🧺 **Aggregation** | `CampusSafetyApplication` ◇ four managers; `IncidentDashboard` ◇ `DataManager`; `DataManager` ◇ `IncidentRepository`; `AIManager` ◇ `AssessmentProvider`; `LogicManager` ◇ optional evaluator/sorter/matcher | Parts are created elsewhere and injected; they can exist and be tested independently. |
-| 🏗️ **Composition** | `IOManager` ◆ `MediaHandler`; `DataManager` ◆ `IncidentExporter`; `BackgroundExportService` ◆ `ThreadPoolExecutor`; `PriorityEvaluator` ◆ `ScoreCalculator` ◆ scorers | The owner creates the part in its constructor and controls its lifetime; the part is not shared. |
+| Concept                           | Where it is implemented                                                                                                                                                                                                                                             | Evidence                                                                                                                                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🧱 **Classes and objects**        | Managers, `CampusSafetyApplication`, `HazardReport`, `AIAssessment`, `Decision`, repositories, rules, scorers                                                                                                                                                       | Objects collaborate to assess, prioritise and store incidents.                                                                                                                                                          |
+| 🔐 **Encapsulation**              | `HazardReport`, managers, repositories, `PriorityRule`                                                                                                                                                                                                              | Underscore-prefixed attributes (`_fields`, `_repository`, `_provider`); `HazardReport.get()` / `as_dict()` return deep copies; state changes go through validated methods. `PriorityRule` exposes read-only properties. |
+| 🧩 **Abstract classes**           | `AssessmentProvider`, `IncidentRepository`, `PriorityRule`, `Scorer`, `TextMatcher`                                                                                                                                                                                 | Each extends `ABC` with `@abstractmethod` operations. `IncidentRepository.replace_all()` also provides shared validation; `TableScorer` is an intermediate abstract class.                                              |
+| 📜 **Interfaces / contracts**     | The same ABCs                                                                                                                                                                                                                                                       | Clients depend on the contract, not on a specific implementation.                                                                                                                                                       |
+| 🌳 **Inheritance and overriding** | `GeminiAssessor`; `JsonIncidentRepository`, `SQLiteIncidentRepository`; `CriticalRule`, `HighRule`, `StandardRule`; `SeverityScorer`, `ImpactScorer`, `FrequencyScorer`; `ExactMatcher`, `FuzzyMatcher`; `InvalidRecord`, `DataStoreError`, `AssessmentUnavailable` | Subclasses override `assess`, `matches`, `score` and `replace_all`. Repositories call `super().replace_all()`; rules call `super().__init__()`.                                                                         |
+| 🔄 **Polymorphism**               | `AIManager` → any `AssessmentProvider`; `DataManager` → any `IncidentRepository`; `PriorityEvaluator` loops over `PriorityRule`s; `ScoreCalculator` loops over `Scorer`s; `IncidentHistory` → any `TextMatcher`                                                     | The same call works on different concrete classes with no type checks. Tests swap Gemini for `ConstantProvider`/`StubProvider`, SQLite for JSON, and `FuzzyMatcher` for `ExactMatcher`.                                 |
+| 🔗 **Association**                | `HazardReport` ↔ `AIAssessment` / `Decision`; `IOManager` ↔ `HazardReport`                                                                                                                                                                                          | Objects use each other in method calls (`attach_assessment()`, `apply_decision()`, `submission_success()`) without keeping or owning them.                                                                              |
+| 🧺 **Aggregation**                | `CampusSafetyApplication` ◇ four managers; `IncidentDashboard` ◇ `DataManager`; `DataManager` ◇ `IncidentRepository`; `AIManager` ◇ `AssessmentProvider`; `LogicManager` ◇ optional evaluator/sorter/matcher                                                        | Parts are created elsewhere and injected; they can exist and be tested independently.                                                                                                                                   |
+| 🏗️ **Composition**                | `IOManager` ◆ `MediaHandler`; `DataManager` ◆ `IncidentExporter`; `BackgroundExportService` ◆ `ThreadPoolExecutor`; `PriorityEvaluator` ◆ `ScoreCalculator` ◆ scorers                                                                                               | The owner creates the part in its constructor and controls its lifetime; the part is not shared.                                                                                                                        |
 
 **Value objects:** `Decision`, `AIAssessment`, `IncidentAuditEntry`, `AIReviewEntry` and `FacilitySummaryReport` are frozen dataclasses, validated on construction.
 
@@ -490,7 +486,6 @@ INF1103_P3_T4_PART2/
 - **OCP:** new behaviour is added by writing a new subclass, without editing existing classes: a new `PriorityRule`, `Scorer`, `TextMatcher`, `AssessmentProvider` or `IncidentRepository`. `test_custom_rule_can_be_added_without_editing_evaluator` demonstrates this. (A new storage backend name must still be registered in `repository_factory.py`.)
 - **LSP:** `JsonIncidentRepository` and `SQLiteIncidentRepository` pass the **same** test contract in `test_data_repositories.py`; `ConstantProvider`/`StubProvider` replace `GeminiAssessor`; `ExactMatcher` replaces `FuzzyMatcher`. Client code is unchanged in every case.
 - **DIP:** `CampusSafetyApplication`, `AIManager`, `DataManager` and `LogicManager` receive their collaborators through constructors; only `create_default()` chooses the concrete classes.
-
 
 ## 👥 Created By
 

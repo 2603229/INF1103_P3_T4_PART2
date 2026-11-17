@@ -1,6 +1,6 @@
 """Campus Safety Operations Console -- Streamlit OOP management dashboard.
 
-Run (from the project root): python -m streamlit run campus_safety/dashboard/dashboard_oop.py
+Run (from the project root): python -m streamlit run dashboard.py
 
 This module only handles presentation and user interaction. The uploaded
 DataManager and domain classes remain the authorities for CRUD, validation,
@@ -24,7 +24,7 @@ import streamlit as st
 
 from campus_safety.data_manager.data_manager import DataManager
 from campus_safety.data_manager.data_store_error import DataStoreError
-from campus_safety.data_manager.repository_factory import create_repository
+from campus_safety.runtime import create_data_manager, load_project_environment
 from campus_safety.domain.hazard_report import HazardReport
 from campus_safety.domain.invalid_record import InvalidRecord
 from campus_safety.domain.schema import VALID_STATUSES
@@ -1414,14 +1414,8 @@ class IncidentDashboard:
 # ---------------------------------------------------------------------------
 def incident_dashboard() -> None:
     """Construct the UI against the existing manager, handling startup failures."""
-    # Read the same .env as the CLI so both use the same backend and database.
-    # Optional: without python-dotenv, terminal environment variables still apply.
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        pass
-    else:
-        load_dotenv(PROJECT_ROOT / ".env")
+    # Shared bootstrap ensures CLI and dashboard use identical backend settings.
+    load_project_environment(PROJECT_ROOT)
     if not DashboardAuth.from_env().require_login():
         return  # login form is showing; nothing else is rendered until sign-in
     backend = os.getenv("HAZARD_STORAGE_BACKEND", "json").strip().lower()
@@ -1435,7 +1429,7 @@ def incident_dashboard() -> None:
         )
         return
     try:
-        manager = DataManager(create_repository(backend))
+        manager = create_data_manager()
     except (DataStoreError, InvalidRecord, OSError, ValueError) as exc:
         st.markdown(STYLE, unsafe_allow_html=True)
         st.error(f"Incident database unavailable: {exc}", icon=None)

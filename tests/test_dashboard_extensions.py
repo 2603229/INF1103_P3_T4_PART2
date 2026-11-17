@@ -33,8 +33,24 @@ def ids(rows):
     return [row["incident_id"] for row in rows]
 
 
-class FilterReportsTests(unittest.TestCase):
+class DashboardExtensionsTests(unittest.TestCase):
 
+    # The evidence-image tests use this folder: a project with uploads, plus a
+    # file outside the project that must never be served.
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        self.project = base / "project"
+        (self.project / "uploads").mkdir(parents=True)
+        (self.project / "uploads" / "leak.png").write_bytes(b"fake image bytes")
+        (self.project / "uploads" / "notes.txt").write_text("not an image")
+        self.outside = base / "secret.png"
+        self.outside.write_bytes(b"outside the project")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    # --- filter_reports: search, filters and sorting ---------------------------
     def test_no_filters_returns_every_row(self) -> None:
         self.assertEqual(len(filter_reports(ROWS)), 4)
 
@@ -72,8 +88,7 @@ class FilterReportsTests(unittest.TestCase):
         self.assertEqual(ROWS[0]["location"], "Library Level 2")
 
 
-class ChartDataTests(unittest.TestCase):
-
+    # --- Chart data and Singapore time -----------------------------------------
     def test_count_by_orders_by_frequency_and_labels_missing_values(self) -> None:
         rows = [{"category": "HVAC"}, {"category": "Electrical"}, {"category": "HVAC"}, {}]
         counts = count_by(rows, "category")
@@ -96,21 +111,7 @@ class ChartDataTests(unittest.TestCase):
         self.assertEqual(format_sg_time(None), "Unknown time")
 
 
-class EvidenceImageTests(unittest.TestCase):
-
-    def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory()
-        base = Path(self._tmp.name)
-        self.project = base / "project"
-        (self.project / "uploads").mkdir(parents=True)
-        (self.project / "uploads" / "leak.png").write_bytes(b"fake image bytes")
-        (self.project / "uploads" / "notes.txt").write_text("not an image")
-        self.outside = base / "secret.png"
-        self.outside.write_bytes(b"outside the project")
-
-    def tearDown(self) -> None:
-        self._tmp.cleanup()
-
+    # --- Evidence images: path traversal and outside files ---------------------
     def test_relative_upload_path_is_found(self) -> None:
         found = resolve_evidence_image("uploads/leak.png", [self.project])
         self.assertEqual(found, (self.project / "uploads" / "leak.png").resolve())
@@ -136,8 +137,7 @@ class EvidenceImageTests(unittest.TestCase):
             self.assertIsNone(resolve_evidence_image("uploads/leak.png", [self.project]))
 
 
-class SafeguardAndMetricTests(unittest.TestCase):
-
+    # --- Demo-data safeguards and overview metrics -----------------------------
     def test_demo_records_are_detected(self) -> None:
         self.assertTrue(demo_records_present([{"incident_id": "A"}, {"demo_fixture": True}]))
         self.assertFalse(demo_records_present([{"demo_fixture": "yes"}, {}]))

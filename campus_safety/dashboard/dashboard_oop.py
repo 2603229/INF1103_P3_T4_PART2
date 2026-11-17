@@ -324,6 +324,93 @@ h1, h2, h3 {font-family:'Manrope',sans-serif;letter-spacing:-0.03em;}
     outline: 3px solid #93C5FD !important;
     outline-offset: 2px;
 }
+/* --------------------------------------------------------------------------
+   Refined theme (style A). Presentation only: appended last so it overrides
+   the rules above without editing them. Remove this block to undo it.
+   -------------------------------------------------------------------------- */
+/* Priority pills: one colour per level, also distinct in lightness. */
+.cs-pill {gap:0.4rem;padding:0.26rem 0.66rem;font-weight:700;}
+.cs-pill::before {content:"";width:0.45rem;height:0.45rem;border-radius:50%;background:currentColor;flex:none;}
+.cs-pill.critical {background:#FEE4E2;color:#912018;}
+.cs-pill.high {background:#FEF0C7;color:#93370D;}
+.cs-pill.normal {background:#E0EAFF;color:#1D3A8A;}
+/* KPI cards: coloured dot instead of a top stripe, softer card. */
+.cs-metric, .cs-metric[class*="cs-metric-tone-"] {
+  border:1px solid #E2E9F1 !important;border-radius:14px;padding:1.1rem 1.25rem;
+  box-shadow:0 1px 2px rgba(23,50,77,0.05) !important;transition:box-shadow .15s ease;
+}
+.cs-metric:hover {box-shadow:0 6px 18px rgba(23,50,77,0.09) !important;}
+.cs-metric-tone-blue {--cs-tone:#176B9C;}
+.cs-metric-tone-teal {--cs-tone:#0E9384;}
+.cs-metric-tone-rose {--cs-tone:#D92D20;}
+.cs-metric-tone-amber {--cs-tone:#DC6803;}
+.cs-metric-label {display:flex;justify-content:space-between;align-items:center;
+  text-transform:none;letter-spacing:0;font-size:0.84rem;font-weight:600;}
+.cs-metric-label::after {content:"";width:10px;height:10px;border-radius:50%;background:var(--cs-tone,#176B9C);}
+.cs-metric-value {font-size:2.2rem;margin:0.45rem 0 0.15rem;}
+/* "Attention needed" notice: alert tone with an icon. */
+.cs-notice {position:relative;background:#FEF3F2;border-color:#FECDCA;color:#7A271A;
+  border-radius:12px;padding:0.85rem 1.05rem 0.85rem 2.9rem;}
+.cs-notice strong {color:#7A271A;}
+.cs-notice::before {content:"!";position:absolute;left:1rem;top:50%;transform:translateY(-50%);
+  width:1.35rem;height:1.35rem;border-radius:50%;background:#D92D20;color:#FFF;
+  font-weight:800;font-size:0.8rem;display:flex;align-items:center;justify-content:center;}
+/* Info banners and empty states. */
+.cs-banner, .cs-flat-banner {background:#EEF6FB;border:1px solid #D6E7F2;color:#1F4E6B;border-radius:12px;}
+.cs-flat-banner strong {color:#17324D;}
+.cs-empty {border-radius:14px;padding:2.6rem 1rem;}
+/* Tables: light header, roomier rows, rounded card. */
+.cs-table-wrap {border-radius:14px;border-color:#E2E9F1 !important;box-shadow:0 1px 2px rgba(23,50,77,0.05);}
+.cs-table th {background:#F8FAFC !important;color:#4F6378 !important;letter-spacing:0.06em;border-bottom:1px solid #E2E9F1;}
+.cs-table td {padding:0.82rem 0.9rem;border-top-color:#EEF2F6;}
+/* Section headings and charts. */
+.cs-section {font-size:1.22rem;margin-top:1.4rem;}
+[data-testid="stMain"] [data-testid="stVegaLiteChart"] {border-color:#E2E9F1;border-radius:14px;overflow:hidden;}
+/* Sidebar: filled active item instead of a left stripe. */
+[data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"] {
+  border:1px solid rgba(255,255,255,0.08) !important;background:#2B4F6E !important;
+}
+/* Breathing room: more space between blocks, cards and sections. */
+[data-testid="stMainBlockContainer"], .block-container {
+  max-width:1400px;padding-left:clamp(1.25rem,3vw,3rem) !important;padding-right:clamp(1.25rem,3vw,3rem) !important;
+}
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] {gap:1.15rem;}
+[data-testid="stMain"] [data-testid="stHorizontalBlock"] {gap:1.25rem;}
+.cs-page-header {margin-bottom:0.6rem;}
+.cs-subtitle {font-size:0.98rem;}
+.cs-metric {min-height:128px;margin-bottom:0.35rem;}
+.cs-notice, .cs-banner, .cs-flat-banner {margin:0.4rem 0 0.6rem;}
+.cs-section {margin:1.6rem 0 0.2rem;}
+.cs-caption {margin-bottom:0.85rem;}
+.cs-inlinebox {padding:0.9rem 1rem;margin-bottom:0.6rem;}
+[data-testid="stMain"] [data-testid="stVegaLiteChart"] {padding-top:0.75rem;}
+[data-testid="stMain"] [data-testid="stAlert"] p {font-size:0.92rem;line-height:1.55;}
+.st-key-cs_overview_open {margin-top:0.5rem;}
+/* Sidebar: left-aligned nav, smaller notes, account box pinned to the bottom. */
+[data-testid="stSidebar"] [data-testid="stButton"] button,
+[data-testid="stSidebar"] [data-testid="stButton"] button > div {justify-content:flex-start !important;}
+[data-testid="stSidebar"] [data-testid="stButton"] button {padding-left:0.9rem !important;gap:0.6rem;}
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p.cs-sidebar-note {font-size:0.82rem !important;line-height:1.55;}
+/* Narrower sidebar and tighter incident table so all columns fit on a laptop. */
+[data-testid="stSidebar"][data-collapsed="false"] {width:268px !important;min-width:268px !important;}
+/* "Show sidebar" button when the sidebar is collapsed. */
+[data-testid="stExpandSidebarButton"], [data-testid="stSidebarCollapsedControl"] button {
+  background:#14273F !important;color:#FFF !important;border-radius:10px !important;
+  width:40px;height:40px;box-shadow:0 2px 8px rgba(20,39,63,0.25);
+}
+[data-testid="stExpandSidebarButton"]:hover, [data-testid="stSidebarCollapsedControl"] button:hover {background:#2B4F6E !important;}
+[data-testid="stExpandSidebarButton"] *, [data-testid="stSidebarCollapsedControl"] button * {color:#FFF !important;}
+.cs-incidents-table th, .cs-incidents-table td {padding-left:0.7rem;padding-right:0.7rem;}
+.cs-incidents-table .cs-location-cell {min-width:150px;}
+.st-key-cs_account,
+[data-testid="stSidebarUserContent"] [data-testid="stVerticalBlock"] > *:has(.st-key-cs_account) {order:99;}
+.st-key-cs_account {margin-top:1.4rem;padding:0.9rem;border-radius:12px;
+  background:#1B3350;border:1px solid #29445E;}
+.st-key-cs_account [data-testid="stCaptionContainer"] p {color:#C7D6E5 !important;font-size:0.85rem;}
+.st-key-cs_account [data-testid="stButton"] button {justify-content:center !important;
+  background:transparent !important;border:1px solid #3A5978 !important;color:#E5EDF7 !important;}
+.st-key-cs_account [data-testid="stButton"] button > div {justify-content:center !important;}
+.st-key-cs_account [data-testid="stButton"] button:hover {background:#213C58 !important;}
 </style>
 """
 
@@ -334,7 +421,7 @@ h1, h2, h3 {font-family:'Manrope',sans-serif;letter-spacing:-0.03em;}
 def _badge(value: Any) -> str:
     val = text(value, "Unassigned")
     css = val.lower().replace(" ", "-")
-    if css not in {"critical", "high", "medium", "low", "pending-review", "in-progress", "resolved", "closed"}:
+    if css not in {"critical", "high", "normal", "medium", "low", "pending-review", "in-progress", "resolved", "closed"}:
         css = "neutral"
     return f'<span class="cs-pill {css}">{escape(val)}</span>'
 

@@ -13,7 +13,7 @@ from campus_safety.ai_manager.assessment_unavailable import AssessmentUnavailabl
 from campus_safety.ai_manager.gemini_assessor import GeminiAssessor
 from campus_safety.data_manager.data_manager import DataManager
 from campus_safety.data_manager.data_store_error import DataStoreError
-from campus_safety.data_manager.repository_factory import create_repository
+from campus_safety.runtime import create_data_manager, load_project_environment
 from campus_safety.domain.decision import Decision
 from campus_safety.domain.facility_summary_report import FacilitySummaryReport
 from campus_safety.domain.hazard_report import HazardReport
@@ -59,18 +59,13 @@ class CampusSafetyApplication:
         Raises DataStoreError/ValueError if the configured database cannot be opened.
         """
         root = Path(project_root).resolve()
-        try:
-            from dotenv import load_dotenv
-        except ImportError:
-            pass  # Environment variables can still be set directly (e.g. docker --env-file).
-        else:
-            load_dotenv(root / ".env")
+        load_project_environment(root)
 
         return cls(
             io=IOManager(base_dir=root),
             ai_manager=AIManager(GeminiAssessor()),
             logic_manager=LogicManager(),
-            data_manager=DataManager(create_repository()),  # JSON or SQLite from .env
+            data_manager=create_data_manager(),  # shared CLI/dashboard repository configuration
             base_dir=root,
         )
 

@@ -4,6 +4,7 @@
 
 """Business-rule tests for LogicManager and its collaborators."""
 import unittest
+from unittest.mock import Mock
 
 from campus_safety.logic_manager.logic_manager import LogicManager
 from campus_safety.logic_manager.priority_evaluator import PriorityEvaluator
@@ -16,10 +17,16 @@ def record(severity="Low", impact="Minor", frequency=0, **extra):
             "historical_frequency": frequency, **extra}
 
 
-class ScoringTests(unittest.TestCase):
+class LogicManagerRulesTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.logic = LogicManager()
+        self.new = {"location": "Library Level 2", "asset_info": "Ceiling light"}
+
+    def existing(self, ident, status, location="Library Level 2", asset="Ceiling light"):
+        return {"incident_id": ident, "status": status, "location": location, "asset_info": asset}
+
+    # --- Scoring -------------------------------------------------------------
 
     def test_severity_points(self) -> None:
         for severity, points in (("Low", 1), ("Medium", 2), ("High", 4), ("Critical", 5)):
@@ -55,11 +62,7 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(self.logic.score(record("High", "Moderate", 2)), 4 + 2 + 2)
 
 
-class PriorityRuleTests(unittest.TestCase):
-
-    def setUp(self) -> None:
-        self.logic = LogicManager()
-
+    # --- Priority rules ------------------------------------------------------
     def test_critical_requires_both_ai_fields(self) -> None:
         """Multi-condition rule: Critical severity AND Severe/Catastrophic impact."""
         for impact in ("Severe", "Catastrophic"):
@@ -100,9 +103,7 @@ class PriorityRuleTests(unittest.TestCase):
         self.assertEqual(self.logic.evaluate({})["priority"], "Normal")
 
 
-class ConfigurationTests(unittest.TestCase):
-    """Collaborators are injected, so behaviour changes without editing any class."""
-
+    # --- Configuration: collaborators are injected, so behaviour changes without editing any class
     def test_custom_high_score_threshold(self) -> None:
         default = LogicManager().evaluate(record("Medium", "Minor"))  # score 3
         lowered = LogicManager(evaluator=PriorityEvaluator(high_score_threshold=3)).evaluate(
@@ -111,11 +112,10 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(lowered["priority"], "High")
 
     def test_custom_calculator_can_be_injected(self) -> None:
-        class BigScore(ScoreCalculator):
-            def breakdown(self, record):
-                return {"severity": 10}
+        big_score = Mock(spec=ScoreCalculator)
+        big_score.breakdown.return_value = {"severity": 10}
 
-        result = PriorityEvaluator(calculator=BigScore()).evaluate(record("Low", "Minor"))
+        result = PriorityEvaluator(calculator=big_score).evaluate(record("Low", "Minor"))
         self.assertEqual(result["score"], 10)
         self.assertEqual(result["priority"], "High")
 
@@ -131,8 +131,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(logic.route({}), "Standard Maintenance Queue")
 
 
-class TextMatcherTests(unittest.TestCase):
-
+    # --- Text matching -------------------------------------------------------
     def test_tolerates_typos_and_spacing(self) -> None:
         matcher = TextMatcher()
         self.assertTrue(matcher.matches("Libary", "Library"))
@@ -170,15 +169,7 @@ class TextMatcherTests(unittest.TestCase):
         self.assertEqual(TextMatcher.normalise(None), "")
 
 
-class HistoryTests(unittest.TestCase):
-
-    def setUp(self) -> None:
-        self.logic = LogicManager()
-        self.new = {"location": "Library Level 2", "asset_info": "Ceiling light"}
-
-    def existing(self, ident, status, location="Library Level 2", asset="Ceiling light"):
-        return {"incident_id": ident, "status": status, "location": location, "asset_info": asset}
-
+    # --- History, duplicates and sorting -----------------------------------
     def test_frequency_counts_only_resolved_or_closed_matches(self) -> None:
         history = [self.existing("INCIDENT-001", "Resolved"),
                    self.existing("INCIDENT-002", "Closed"),
@@ -238,8 +229,7 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual([r["severity"] for r in rows], ["low", "CRITICAL", " high "])
 
 
-class FacilitiesSummaryRuleTests(unittest.TestCase):
-
+    # --- Facilities summary --------------------------------------------------
     def test_resolved_and_closed_are_excluded(self) -> None:
         rows = [{"status": "Pending Review", "location": "Block A", "category": "HVAC"},
                 {"status": "Resolved", "location": "Block A", "category": "HVAC"},

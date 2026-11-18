@@ -127,6 +127,8 @@ class HazardReport:
 
     # Assign the incident ID and initial status exactly once, with a creation audit event.
     def assign_identity(self, incident_id: str) -> None:
+        if not isinstance(incident_id, str) or not incident_id.strip():
+            raise InvalidRecord("Incident ID is required")
         if self.incident_id:
             raise InvalidRecord("An existing incident ID cannot be reassigned")
         self._fields["incident_id"] = incident_id

@@ -95,6 +95,17 @@ class HazardReportDomainTests(unittest.TestCase):
 
 
     # --- Status transitions -----------------------------------------------------
+    def test_blank_identity_is_rejected_without_mutating_report(self) -> None:
+        report = HazardReport.from_storage({})
+        with self.assertRaises(InvalidRecord):
+            report.assign_identity("  ")
+
+        self.assertEqual(report.incident_id, "")
+        self.assertIsNone(report.get("timestamp"))
+        self.assertEqual(report.status_history(), [])
+        report.assign_identity("INCIDENT-001")
+        self.assertEqual(report.incident_id, "INCIDENT-001")
+
     def test_assign_identity_only_once(self) -> None:
         with self.assertRaises(InvalidRecord):
             self.saved_report().assign_identity("INCIDENT-002")

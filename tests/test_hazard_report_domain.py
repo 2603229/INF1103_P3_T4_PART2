@@ -47,6 +47,9 @@ class HazardReportDomainTests(unittest.TestCase):
             "headcount zero": {"impact_headcount": 0},
             "headcount too large": {"impact_headcount": 1001},
             "headcount text": {"impact_headcount": "many"},
+            "fractional headcount": {"impact_headcount": 10.5},
+            "boolean headcount": {"impact_headcount": True},
+            "infinite headcount": {"impact_headcount": float("inf")},
             "short asset": {"asset_info": "ab"},
             "short description": {"description": "too short"},
         }

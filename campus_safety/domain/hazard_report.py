@@ -38,9 +38,14 @@ class HazardReport:
         location = str(fields.get("location") or "").strip()
         asset = str(fields.get("asset_info") or "").strip()
         desc = str(fields.get("description") or "").strip()
+        raw_people = fields.get("impact_headcount")
         try:
-            people = int(fields.get("impact_headcount"))
-        except (ValueError, TypeError) as exc:
+            if isinstance(raw_people, bool):
+                raise ValueError
+            people = int(raw_people)
+            if isinstance(raw_people, float) and not raw_people.is_integer():
+                raise ValueError
+        except (ValueError, TypeError, OverflowError) as exc:
             raise InvalidRecord("Headcount must be a whole number") from exc
         if not re.fullmatch(r"[A-Za-z\s'.-]+", name):
             raise InvalidRecord("Reporter name contains invalid characters")

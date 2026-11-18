@@ -110,15 +110,15 @@ class HazardReport:
     # Store the risk score, priority, routing decision, historical count and duplicate result.
     def apply_decision(self, decision: Decision, historical_frequency: int,
                        duplicate_check: str) -> None:
-        self._fields.update(historical_frequency=historical_frequency,
-                            is_duplicate=duplicate_check, priority_score=decision.score,
+        self.set_historical_frequency(historical_frequency)
+        self._fields.update(is_duplicate=duplicate_check, priority_score=decision.score,
                             final_priority=decision.priority, recommended_action=decision.action,
                             escalation_reason=decision.reason, assigned_route=decision.route)
 
     # Store the nonnegative recurrence count used by the risk policy.
     def set_historical_frequency(self, count: int) -> None:
-        if count < 0:
-            raise InvalidRecord("Historical frequency cannot be negative")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise InvalidRecord("Historical frequency must be a nonnegative integer")
         self._fields["historical_frequency"] = count
 
     # Keep a resolved image path for Gemini; it is intentionally never serialized.

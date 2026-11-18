@@ -82,6 +82,17 @@ class HazardReportDomainTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             decision.score_breakdown["severity"] = 99
 
+    def test_historical_frequency_must_be_a_nonnegative_integer(self) -> None:
+        report = HazardReport.from_storage({})
+        decision = Decision("Normal", 2, "Repair", "Reason", "Queue", {})
+        for count in (-1, 1.5, True, "2"):
+            with self.subTest(count=count):
+                with self.assertRaises(InvalidRecord):
+                    report.set_historical_frequency(count)
+                with self.assertRaises(InvalidRecord):
+                    report.apply_decision(decision, count, "Unique")
+        self.assertIsNone(report.get("historical_frequency"))
+
 
     # --- Status transitions -----------------------------------------------------
     def test_assign_identity_only_once(self) -> None:

@@ -2,7 +2,7 @@
 
 ## 1. 📌 Project overview
 
-This project refactors the Phase 1 Campus Safety Hazard Reporting System into a modular, object-oriented Python application. The current source declares **34 project-defined classes across 33 Python class-bearing files** in the application controller, four managers, domain objects and dashboard. The two classes `DashboardLauncher` and `DashboardLaunchError` share `launcher.py`; the built-in exception types extended by project exceptions are not counted as application classes. This count was checked against the Python source in the supplied archive on 18 November 2026. Students and staff submit hazard reports through a command-line interface (CLI). Each report is assessed by Google Gemini, prioritised by business rules and saved to a JSON or SQLite database.
+This project refactors the Phase 1 Campus Safety Hazard Reporting System into a modular, object-oriented Python application. The current source declares **34 project-defined classes across 33 Python class-bearing files** in the application controller, four managers, domain objects and dashboard. The two classes `DashboardLauncher` and `DashboardLaunchError` share `launcher.py`; the built-in exception types extended by project exceptions are not counted as application classes. Students and staff submit hazard reports through a command-line interface (CLI). Each report is assessed by Google Gemini, prioritised by business rules and saved to a JSON or SQLite database.
 
 Every **new report** follows the four-manager workflow, coordinated by `CampusSafetyApplication`:
 
@@ -253,16 +253,12 @@ These are **interface-level improvements** to existing `DataManager` operations.
 4. On successful persistence through `DataManager.update_status()` or `DataManager.record_ai_review()`, a per-incident `st.session_state` reset flag is set. On rerun, the text inputs are cleared and the saved status or default review decision is shown.
 5. When validation fails or a save fails, the reset flag is not set, so the user can correct the form instead of starting over.
 
-**Important UI detail:** Because a selection outside `st.form()` triggers a rerun, **choose the dropdown value before typing long unsaved form text**. Live preview does not mean auto-save.
-
 **Manual demonstration / verification (use a disposable test database):**
 
 - **Status change:** Select an incident that is `Pending Review`, choose `In Progress`, confirm the live preview, enter a reason, save, then confirm the reason clears and an entry appears in **Activity history**.
 - **AI review:** On a record with a completed Gemini assessment, choose `Flagged as Incorrect`, confirm the preview, enter a fictional reviewer name and reason, save, then confirm the inputs clear, the decision resets to `Accepted`, and the saved entry appears in **AI Review History**.
 - **Validation:** Try submitting a status change with an empty reason or an AI review without a reviewer name. The warning should appear, and existing typed data should not be intentionally reset.
 - **Data integrity:** Confirm that changing a review decision does **not** overwrite Gemini category, severity, risk summary, priority, or the incident's status.
-
-The relevant UI state keys are scoped by incident ID (`cs_status_*_{incident_id}` and `cs_ai_*_{incident_id}`), so the forms of different incidents do not deliberately share values.
 
 ## 8. 🛠️ Installation and run guide
 

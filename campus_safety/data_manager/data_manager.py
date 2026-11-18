@@ -128,6 +128,7 @@ class DataManager:
         all_reports = self.load()
         results = []
         normalized_location_query = location_query.strip().casefold()
+        normalized_category_filter = category_filter.strip().casefold()
         severity_ranks = {
             severity.casefold(): rank
             for rank, severity in enumerate(VALID_SEVERITIES, start=1)
@@ -147,8 +148,8 @@ class DataManager:
                 continue
 
             # Match category (e.g. Electrical, Infrastructure, Plumbing)
-            cat = str(data.get("category", "")).lower()
-            if category_filter and category_filter.lower() != cat:
+            cat = str(data.get("category", "")).strip().casefold()
+            if normalized_category_filter and normalized_category_filter != cat:
                 continue
 
             # Match severity threshold

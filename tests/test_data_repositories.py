@@ -417,7 +417,7 @@ class DataRepositoryTests(unittest.TestCase):
         matches = self.data.search(
             location_query="  BUILDING E  ",
             status_filter="In Progress",
-            category_filter="eLeCtRiCaL",
+            category_filter=" eLeCtRiCaL ",
             min_severity=4,
         )
         self.assertEqual([row["incident_id"] for row in matches], ["INCIDENT-001"])

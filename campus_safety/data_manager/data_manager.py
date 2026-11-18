@@ -122,7 +122,11 @@ class DataManager:
         """Filter stored records; severity thresholds rank Low=1 through Critical=4."""
         if status_filter and status_filter not in VALID_STATUSES:
             raise InvalidRecord("Invalid incident status filter")
-        if not 1 <= min_severity <= len(VALID_SEVERITIES):
+        if (
+            isinstance(min_severity, bool)
+            or not isinstance(min_severity, int)
+            or not 1 <= min_severity <= len(VALID_SEVERITIES)
+        ):
             raise InvalidRecord("Minimum severity must be between 1 and 4")
 
         all_reports = self.load()

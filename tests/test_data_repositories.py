@@ -428,6 +428,9 @@ class DataRepositoryTests(unittest.TestCase):
         )
         with self.assertRaises(InvalidRecord):
             self.data.search(status_filter="Unknown")
+        for threshold in (0, 5, 1.5, True):
+            with self.subTest(min_severity=threshold), self.assertRaises(InvalidRecord):
+                self.data.search(min_severity=threshold)
 
     def test_json_migration_into_memory_database(self) -> None:
         self.use_memory_database()

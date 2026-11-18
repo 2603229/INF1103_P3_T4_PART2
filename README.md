@@ -20,7 +20,7 @@ Every **new report** follows the four-manager workflow, coordinated by `CampusSa
 | 🖥️ Additional enhancements | **Dashboard sign-in and sign-out**, **AI Assessment Review & Feedback**, **Incident Status Audit Trail**, Streamlit dashboard, single-command launcher, live form previews, field clearing and background CSV export — Sections 7.2–7.5 |
 | 🐳 Docker                  | `Dockerfile` — Section 8.2                                                                                                                                                                                                              |
 | ⚙️ CI                      | `.github/workflows/python-tests.yml` — Section 9                                                                                                                                                                                        |
-| ✅ Tests                   | **266 `unittest`-discoverable test cases** in the latest source, including 7 single-command launcher tests; 25 extra logic-manager tests and 3 pytest-style checks raise the expected `pytest` collection to **294**. Counts reflect code inspection, not a new full-suite pass — Section 9                      |
+| ✅ Tests                   | **269 `unittest`-discoverable tests**, all passing locally on 18 November 2026; the broader `pytest` run also passed **297 tests** (plus 103 reported subtests). This includes 7 single-command launcher tests and the additional logic-manager/pytest-style checks — Section 9                      |
 
 ## 2. ✨ Main application functions
 
@@ -118,7 +118,7 @@ Gemini must return a JSON object with **exactly** five string fields: `risk_summ
 - Severity: Low, Medium, High, Critical
 - Operational impact: Minor, Moderate, Severe, Catastrophic
 
-Reporter name and contact are excluded from the prompt, and recognisable names, emails and Singapore phone numbers are redacted from free text (`GeminiPromptBuilder`). Images must be JPEG/PNG/WEBP, at most 10 MiB, and their content must match their extension (`ImageEvidenceProcessor`). `GeminiAssessor` retries failed calls and falls back through the models listed in `GEMINI_MODELS`.
+Reporter name and contact are excluded from the prompt, and recognisable names, emails and Singapore phone numbers are redacted from free text (`GeminiPromptBuilder`). Images must be JPEG/PNG/WEBP, at most 10 MiB, and their content must match their extension (`ImageEvidenceProcessor`). `GeminiAssessor` attempts each configured model up to twice (by default) before trying the next model; model names and order come from `GEMINI_MODELS` when set. If every attempt fails, the application raises `AssessmentUnavailable` rather than saving an unassessed report. See Section 8.5 for troubleshooting.
 
 ### 5.3 Priority scoring (`LogicManager`)
 
@@ -272,8 +272,8 @@ The relevant UI state keys are scoped by incident ID (`cs_status_*_{incident_id}
 git clone https://github.com/2603229/INF1103_P3_T4_PART2.git
 cd INF1103_P3_T4_PART2
 python -m pip install -r requirements.txt
-# Optional: Copy-Item .env.example .env
-# For real incident submissions, set GEMINI_API_KEY in your environment or .env.
+Copy-Item .env.example .env             # first-time setup (edit locally; do not commit)
+# Set GEMINI_API_KEY for real submissions; change the demo dashboard password.
 python -m unittest discover -s tests -t . -v
 python main.py                          # launches dashboard + CLI together
 # Optional alternatives:
@@ -282,13 +282,13 @@ python main.py --no-browser             # both, without automatic browser openin
 python -m streamlit run dashboard.py    # dashboard only
 ```
 
-Run **only `python main.py`** in the project root. The dashboard starts automatically, and your browser opens at **http://localhost:8501** (or another available local port if 8501 is occupied). The CLI remains interactive in the same terminal. Both processes share environment settings and the same database. **When you exit the CLI, the dashboard server stops as well.** If a browser does not open, use the URL printed in the terminal. The dashboard first shows a sign-in form; use `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` from `.env` (defaults `admin` / `admin123`, see Section 8.3). `DASHBOARD_PORT` optionally fixes the dashboard port; an explicit occupied port generates a warning rather than redirecting to a different service. The optional `.env` applies to both interfaces. Without it, both use JSON storage by default; a Gemini API key is required only for real AI-assessed report submissions. If Streamlit is not installed, the CLI continues and displays installation instructions. A virtual environment is not required.
+For the normal integrated workflow, run **`python main.py`** in the project root. The dashboard starts automatically, and your browser opens at **http://localhost:8501** (or another available local port if 8501 is occupied). The CLI remains interactive in the same terminal. Both processes share environment settings and the same database. **When you exit the CLI, the dashboard server stops as well.** If a browser does not open, use the URL printed in the terminal. The dashboard first shows a sign-in form; use `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` from `.env` (defaults `admin` / `admin123`, see Section 8.3). `DASHBOARD_PORT` optionally fixes the dashboard port; an explicit occupied port generates a warning rather than redirecting to a different service. The optional `.env` applies to both interfaces. The supplied `.env.example` selects **SQLite**; if `.env` is absent and the variable is unset, both use **JSON** storage by default; a Gemini API key is required only for real AI-assessed report submissions. If Streamlit is not installed, the CLI continues and displays installation instructions. A virtual environment is not required.
 
 A virtual environment is optional; it is not required for these commands. SQLite is part of Python's standard library; do **not** install a separate `sqlite3` package.
 
 ### 8.2 🐳 Docker
 
-Requires Docker Desktop to be running. No local Python installation is needed.
+Requires Docker Desktop to be running. No local Python installation is needed. **Create your own `.env` from `.env.example` before using the `--env-file .env` commands**; keep its credentials private.
 
 ```powershell
 # Build the image (from the repository root)
@@ -314,18 +314,21 @@ The image's default command is `python main.py --cli-only`, so the interactive C
 
 ### 8.3 🔐 Configuration (`.env`)
 
-| Variable                          | Purpose                                            | Default                                                 |
-| --------------------------------- | -------------------------------------------------- | ------------------------------------------------------- |
-| `GEMINI_API_KEY`                  | Gemini credentials (required for real submissions) | —                                                       |
-| `GEMINI_MODELS`                   | Comma-separated model fallback order               | Built-in list in `gemini_assessor.py`                   |
-| `HAZARD_STORAGE_BACKEND`          | `json` or `sqlite`                                 | `json` when unset; `.env.example` selects `sqlite`      |
-| `SQLITE_DB_PATH` / `INCIDENTS_DB` | Optional custom SQLite / JSON file path            | Under `HAZARD_DATA_DIR` when unset                      |
-| `HAZARD_DATA_DIR`                 | Shared data folder for either backend              | Project folder (`/data` in Docker)                      |
-| `DASHBOARD_PORT`                  | Local dashboard port for `python main.py`          | `8501` (automatic fallback when occupied)               |
-| `DASHBOARD_USERNAME`              | Dashboard sign-in username                         | `admin`                                                 |
-| `DASHBOARD_PASSWORD`              | Dashboard sign-in password                         | `admin123` (**change before demonstrating or sharing**) |
+Copy `.env.example` to `.env`, set your own secret values and keep `.env` outside Git and shared submissions. Environment variables supplied by the operating system or Docker take precedence over the file.
 
-Never commit `.env`, share your key or show it in screenshots. Changing the backend does **not** transfer existing records. Use **fictional test data** when demonstrating the application.
+| Variable | Purpose | When unset |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | Gemini API credential for real incident submissions | Live AI submission is unavailable |
+| `GEMINI_MODELS` | Ordered, comma-separated Gemini model IDs; the provider tries each in turn | Code-defined list in `gemini_assessor.py` (`gemini-3.8-flash,gemini-3.6-flash` in this upload) |
+| `HAZARD_STORAGE_BACKEND` | `json` or `sqlite` | `json`; the supplied `.env.example` uses `sqlite` |
+| `SQLITE_DB_PATH` | Optional path for the SQLite database | `hazardreports.sqlite3` under `HAZARD_DATA_DIR` |
+| `INCIDENTS_DB` | Optional path for the JSON repository | JSON repository's default path under `HAZARD_DATA_DIR` |
+| `HAZARD_DATA_DIR` | Shared storage directory | Project folder locally; `/data` in Docker |
+| `DASHBOARD_PORT` | Port selected by `python main.py` | `8501`, or a free port if in use; an explicitly set occupied port raises a warning |
+| `DASHBOARD_USERNAME` | Local dashboard username | `admin` |
+| `DASHBOARD_PASSWORD` | Local dashboard password | `admin123` — **replace this demo default** |
+
+**Important:** `.env.example` is a template, not a secret configuration. Never commit `.env` or share Gemini keys, passwords, real reporter information, saved SQLite/JSON records or uploaded evidence. Changing storage backends does **not** migrate records automatically; the SQLite repository provides an explicit import API.
 
 ### 8.4 🎨 Optional Streamlit theme
 
@@ -344,51 +347,72 @@ font = "sans serif"
 
 Streamlit can run without this file, but **keep the included version** for consistent contrast. Its location is **`<project root>/.streamlit/config.toml`**, not inside `campus_safety/dashboard/`.
 
+### 8.5 🤖 Gemini availability and troubleshooting
+
+Live AI assessment uses `GeminiAssessor` (`campus_safety/ai_manager/gemini_assessor.py`). The built-in model order in this upload is `gemini-3.8-flash,gemini-3.6-flash`; the `GEMINI_MODELS` environment variable overrides it. Confirm the **exact model IDs and access** supported by your Gemini project before using them; the README does not establish that a particular model is currently available.
+
+```dotenv
+# Example only: replace with model IDs available to your API project.
+# GEMINI_MODELS=your-primary-model,your-fallback-model
+```
+
+- **Both models report high demand, rate limiting or service unavailability:** this is an API-side response, not proof that the IO, Logic or Data Manager is broken. `GeminiAssessor` tries each model up to **two times** by default with a short delay between attempts, then moves to the next. If all attempts fail, **the incident is not saved**. Check model status, project quotas, rate limits and network access, then retry when service is available.
+- **Model not found or not permitted:** verify `GEMINI_MODELS` against the model IDs available to the API key/project. Model fallback cannot help when **every** configured ID is unsupported or inaccessible.
+- **Missing API key:** set `GEMINI_API_KEY` in `.env` or in the process environment. Do not hard-code the key or commit it.
+- **Dashboard opens but no reports can be submitted:** the dashboard can still read existing records and manage them without live Gemini; **new incident submission requires a valid five-field response** from a working AI provider. Offline automated tests use stubs, so passing tests alone does not verify current Gemini availability.
+- **Dashboard shows the wrong database:** use the **same** `HAZARD_STORAGE_BACKEND`, `HAZARD_DATA_DIR` and relevant database path settings for both CLI and dashboard. For Docker, use the same named `/data` volume. A database viewer is available under **Data & backups** when using SQLite.
+- **Dashboard sign-in missing:** run the root entry point `python -m streamlit run dashboard.py` (or `python main.py`), which calls `incident_dashboard()` and its login gate. For Docker use the dashboard command in Section 8.2, check your `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD`, and rebuild the image after code changes.
+
+Do not treat error strings such as “high demand” as evidence of success or fabricate an AI assessment. The system intentionally prevents unassessed incidents from entering the database.
+
 ## 9. ✅ Automated tests and CI
 
-**Latest source inventory (18 November 2026):** `unittest` discovery includes **266** tests, and full `pytest` collection is expected to include **294** tests. The seven `tests.test_single_command_launcher` tests were executed separately on 18 November 2026 and all passed. Compared with the README’s previously recorded **259 / 287** passing totals from 17 November, the current source also contains **7** new tests in `test_single_command_launcher.py`. The additional 25 logic-manager tests and 3 pytest-style IO checks are collected separately, as explained below. These **updated totals were calculated from the test sources, not confirmed as passing in a new full-suite execution**. Offline tests use stubbed AI responses and temporary repositories; a live Gemini API key is not required.
+**Locally verified on 18 November 2026 against the uploaded source:** `python -m unittest discover -s tests -t . -q` ran **269 tests**, all passed. `python -m pytest tests -q` ran **297 tests**, all passed, and reported **103 passed subtests**. `python -m tests.run_all_tests` independently reported **269/269 passed**, and `python -m tests.run_ai_tests` reported **51/51 passed**. These are **offline automated results**; they are not evidence of a live Gemini API call, successful Docker build, browser smoke test or completed GitHub-hosted CI workflow.
 
 ```powershell
 python -m compileall -q main.py dashboard.py campus_safety tests
-python -m unittest discover -s tests -t . -v    # currently 266 discoverable tests
-python -m tests.run_all_tests                    # grouped full-suite summary
-python -m tests.run_ai_tests                     # overlapping AI subset: 51 tests
-python -m tests.run_application_tests            # application workflow + main entry point: 30 tests
-python -m unittest tests.test_single_command_launcher -v # 7 launcher tests
-# Optional with pytest installed: python -m pytest tests -q  # expected: 294 tests
+python -m unittest discover -s tests -t . -v
+python -m tests.run_all_tests                  # grouped results for 269 unittest tests
+python -m tests.run_ai_tests                   # AI Manager subset: 51 tests
+python -m tests.run_application_tests          # application workflow / entry point subset
+python -m unittest tests.test_single_command_launcher -v  # launcher: 7 tests
+
+# Optional: covers tests skipped by regular unittest discovery
+python -m pip install pytest
+python -m pytest tests -q                      # locally verified: 297 passed
 ```
 
 ### 9.1 Test coverage in this project version
 
-| Area / test module                                 |   Tests | Main coverage                                                                                                          |
-| -------------------------------------------------- | ------: | ---------------------------------------------------------------------------------------------------------------------- |
-| AI Manager (`tests/ai_manager_test/`, six modules) |      51 | Schema validation, provider abstraction, Gemini retries/fallback, prompts and image validation                         |
-| `test_logic_manager_rules.py`                      |      42 | Priority rules, severity/impact scoring, history, duplicate matching, injected configuration, facilities summary rules |
-| `test_data_repositories.py`                        |      50 | JSON/SQLite CRUD, status audit, AI review, migrations, persistence, backups and corruption                             |
-| `test_hazard_report_domain.py`                     |      17 | Domain validation, incident state changes, AI review rules                                                             |
-| `test_io_manager_cli.py`                           |      14 | CLI, validation loops, search criteria and facilities output                                                           |
-| `test_application_workflow.py`                     |      30 | End-to-end submission, cancellation, failure handling, menu routes and `main()` start-up/exit codes                    |
-| `test_facilities_data_manager_search.py`           |      10 | Incident filters and searches                                                                                          |
-| `test_facilities_logic_manager_summary.py`         |       2 | Facilities summaries                                                                                                   |
-| `test_facilities_workflow_integration.py`          |       1 | Integrated facilities search/summary                                                                                   |
-| `test_facility_summary_domain.py`                  |       2 | Facility summary result validation                                                                                     |
-| `test_incident_exporter.py`                        |       4 | Exporter behaviour                                                                                                     |
-| `test_background_export_service.py`                |       9 | Threaded export service and task handling                                                                              |
-| `test_dashboard_extensions.py`                     |      22 | Dashboard presentation/helper logic                                                                                    |
-| `test_dashboard_auth.py`                           |       5 | Dashboard credential checking                                                                                          |
-| `test_single_command_launcher.py`                 |       7 | One-command launch, CLI fallback, child process lifecycle and port selection                                           |
-| **Total discoverable `unittest` tests**            | **266** | **Current source inventory; run the suite to confirm a pass**                                                         |
+| Area / test module | `unittest` tests | Main coverage |
+| --- | ---: | --- |
+| AI Manager (`tests/ai_manager_test/`, six modules) | 51 | Schema validation, provider abstraction, Gemini retries/fallback, prompts and images |
+| `test_logic_manager_rules.py` | 42 | Priority rules, scores, matching and facilities summaries |
+| `test_data_repositories.py` | 51 | JSON/SQLite CRUD, audit history, AI reviews, migration, backups and corruption |
+| `test_hazard_report_domain.py` | 19 | Domain validation, status history and AI-review rules |
+| `test_io_manager_cli.py` | 14 | CLI validation, menu and facilities search/summary output |
+| `test_application_workflow.py` | 30 | Integrated workflow, cancellations and failure handling |
+| `test_facilities_data_manager_search.py` | 10 | Storage search and filters |
+| `test_facilities_logic_manager_summary.py` | 2 | Facilities aggregation |
+| `test_facilities_workflow_integration.py` | 1 | Integrated facilities workflow |
+| `test_facility_summary_domain.py` | 2 | Summary value object |
+| `test_incident_exporter.py` | 4 | CSV/TXT export behavior |
+| `test_background_export_service.py` | 9 | Threaded exports |
+| `test_dashboard_extensions.py` | 22 | Dashboard helpers and presentation behavior |
+| `test_dashboard_auth.py` | 5 | Dashboard credential validation |
+| `test_single_command_launcher.py` | 7 | Single-command launch and process lifecycle |
+| **Total discovered by `unittest`** | **269** | **269 passed locally** |
 
-Two sets of tests are **not collected by `unittest` discovery** and are therefore **excluded** from the 266-test total:
+The standard `unittest` discovery command **does not include** two additional test groups:
 
-- `tests/test_io_manager.py` contains **three pytest-style checks**. Run them with `python -m pytest tests/test_io_manager.py -v`.
-- `tests/logic_manager_test/` (`test_priority_rules.py`, `test_scoring.py`) contains **25 `unittest` tests** for the priority rules and scorers, but the folder has no `__init__.py`, so discovery skips it. Run them with `python -m unittest tests.logic_manager_test.test_scoring tests.logic_manager_test.test_priority_rules`, or with `pytest`. The CI workflow does not run them either.
+- **25 `unittest` cases** in `tests/logic_manager_test/test_priority_rules.py` and `test_scoring.py` because that subfolder lacks `__init__.py`. Run them explicitly with `python -m unittest tests.logic_manager_test.test_scoring tests.logic_manager_test.test_priority_rules -v`, or include them in `pytest`.
+- **3 pytest-style tests** in `tests/test_io_manager.py`, which `unittest` does not collect. Run with `python -m pytest tests/test_io_manager.py -v`.
 
-`pytest` is not listed in the runtime `requirements.txt`; install it separately with `python -m pip install pytest`. `python -m pytest tests -q` should collect **294** tests (266 discoverable `unittest` tests + 25 logic-manager tests + 3 pytest-style checks). This is a **test-count expectation**, not a claim that all 294 have passed.
+This explains the difference: **269 + 25 + 3 = 297 tests**. `pytest` is **not** an application runtime dependency in `requirements.txt`; install it separately when running the broader test suite. Pytest also reports **103 subtests** associated with tests in the suite; these should not be added to the 297 individual test count.
 
-**Browser verification is separate:** the automated dashboard tests primarily cover helper logic, credential checking and export services. Manually verify Streamlit rendering, the sign-in and log-out flow, live selectbox previews, button contrast and the field-clearing behaviour described in Section 7.5. The inventory above does **not** establish a passing run, Docker startup or successful GitHub-hosted CI execution.
+**Manual browser verification is still needed:** open Streamlit, sign in and out, review live status/AI-review previews, verify form fields clear only after a successful save, inspect the SQLite viewer and confirm backed-up records remain accessible. Offline unit tests do not confirm live Gemini availability or the visual appearance of the app.
 
-**CI configuration:** `.github/workflows/python-tests.yml` runs on pushes to `main` and `feature/**`, and pull requests to `main`. The `basic-checks` job checks essential files, compiles Python, installs dependencies, runs AI tests, imports the dashboard and runs the complete `unittest` suite. The `docker` job builds the image, runs the same suite in the container and smoke-tests the CLI using menu option 6. **Review GitHub Actions results separately** before claiming CI/Docker success in the engineering report.
+**CI configuration:** `.github/workflows/python-tests.yml` runs for pushes to `main` and `feature/**` and pull requests to `main`. Its `basic-checks` job verifies required files, compiles Python, installs dependencies, runs AI tests, checks dashboard imports and runs the **269-test `unittest`-discoverable suite**. A dependent `docker` job builds the image, reruns those tests in the container and smoke-tests CLI exit using menu option 6. This workflow does **not** run the extra 28 pytest-only/discovery-skipped tests. Verify the actual GitHub Actions logs before claiming hosted CI/Docker success in the report.
 
 ## 10. ⚠️ Exception handling
 
@@ -406,7 +430,7 @@ A missing database file is not an error: it is treated as an empty database and 
 
 ## 11. 🗂️ Project structure
 
-The following is the **actual source and test layout** in this project version. Generated databases, `.env`, uploads and Python cache files are intentionally omitted.
+The following is the **actual source and test layout** in this project version. Generated databases, `.env`, uploads, Git history and Python cache files are intentionally omitted. The source archive contains these local artifacts, but they should not be included in a public submission.
 
 ```text
 INF1103_P3_T4_PART2/
@@ -428,7 +452,6 @@ INF1103_P3_T4_PART2/
 │       ├── dashboard_extensions.py    # Dashboard presentation helpers
 │       ├── background_export_service.py
 │       ├── launcher.py                # DashboardLauncher: background Streamlit process for main.py
-│       ├── README_INTEGRATION.md      # Original dashboard hand-over notes (this README takes precedence)
 │       └── optional_theme/
 ├── tests/
 │   ├── __init__.py
@@ -500,41 +523,6 @@ The **48 project-defined classes** were counted from the top-level `class` decla
 | Domain | **6** | `HazardReport`, `Decision`, `FacilitySummaryReport`, `IncidentAuditEntry`, `AIReviewEntry`, `InvalidRecord` |
 | Dashboard | **5** | `IncidentDashboard`, `DashboardAuth`, `BackgroundExportService`, `DashboardLauncher`, `DashboardLaunchError` |
 | **Total** | **48** | **48 application classes across 47 source files** |
-
-**Inheritance (UML generalisation, hollow triangle pointing to the parent):**
-
-```text
-AssessmentProvider <|-- GeminiAssessor
-IncidentRepository <|-- JsonIncidentRepository
-IncidentRepository <|-- SQLiteIncidentRepository
-PriorityRule <|-- CriticalRule
-PriorityRule <|-- HighRule
-PriorityRule <|-- StandardRule
-Scorer <|-- FrequencyScorer
-Scorer <|-- TableScorer
-TableScorer <|-- SeverityScorer
-TableScorer <|-- ImpactScorer
-TextMatcher <|-- ExactMatcher
-TextMatcher <|-- FuzzyMatcher
-ValueError <|-- InvalidRecord
-RuntimeError <|-- AssessmentUnavailable
-RuntimeError <|-- DataStoreError
-RuntimeError <|-- DashboardLaunchError
-```
-
-Here `Parent <|-- Child` means **Child inherits from Parent**. `ValueError` and `RuntimeError` are **Python built-in classes** shown only as inheritance parents, and are **not included** in the 48-class count. `DashboardLaunchError` and `DashboardLauncher` are separate project classes declared in the same `launcher.py` file.
-
-**Important current collaborations (use directed association/dependency arrows where applicable, not inheritance):**
-
-- `CampusSafetyApplication` holds the four injected managers: `IOManager`, `AIManager`, `LogicManager`, `DataManager`.
-- `IOManager` creates `MediaHandler` and calls input validation helpers from `InputValidator`; it constructs/returns `HazardReport` instances for submissions.
-- `AIManager` uses an `AssessmentProvider` (normally `GeminiAssessor`), which uses `GeminiPromptBuilder` and `ImageEvidenceProcessor` and produces `AIAssessment`.
-- `LogicManager` uses `PriorityEvaluator`, temporarily creates `IncidentHistory` for matching/frequency and uses `IncidentReporter` for sorting and facilities summaries. `PriorityEvaluator` uses `ScoreCalculator`; `IncidentHistory` uses a `TextMatcher` (or substitutable subtype).
-- `DataManager` holds an `IncidentRepository` and creates `IncidentExporter`; repository implementations store/retrieve `HazardReport` records, including `IncidentAuditEntry` and `AIReviewEntry` histories. `HazardReport` also attaches `AIAssessment` and `Decision` value objects; the facilities summary operation returns `FacilitySummaryReport`.
-- `incident_dashboard()` calls `DashboardAuth` **before** constructing `IncidentDashboard`; it then injects `DataManager` into `IncidentDashboard`. Dashboard export handling uses `BackgroundExportService`. `DashboardLauncher` starts the Streamlit process from `main.py`. These classes have **dependencies/associations**, not inheritance from one another.
-- Custom exception **dependencies** are separate from their superclass arrows: invalid domain records raise `InvalidRecord`, AI failures raise `AssessmentUnavailable`, storage failures raise `DataStoreError`, and dashboard launch failures raise `DashboardLaunchError`. Their actual callers catch/handle them as documented in Section 10.
-
-**UML accuracy note:** the class inventory includes classes kept for standalone examples or tests. In the latest runtime flow, `PriorityEvaluator` does not instantiate `PriorityRule` subclasses, `ScoreCalculator` does not call the separate `Scorer` hierarchy, and `IncidentReporter` does not call `FacilitySummaryBuilder` / `SeveritySorter`. Do not draw these as **runtime ownership/composition** relationships without changing the implementation. A source import, dependency, aggregation, association, composition and inheritance are **different UML relationships**; choose arrows based on actual object creation and method calls.
 
 ## 👥 Created By
 

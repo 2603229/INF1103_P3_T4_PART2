@@ -30,4 +30,4 @@ VOLUME ["/data"]
 # Streamlit dashboard port (only used when the dashboard command is run).
 EXPOSE 8501
 
-CMD ["python", "main.py"]
+CMD ["python", "main.py", "--cli-only"]

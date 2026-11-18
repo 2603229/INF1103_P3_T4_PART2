@@ -82,6 +82,8 @@ class DataManager:
 
     # Remove an identified incident while retaining a pre-change backup where supported.
     def delete(self, incident_id: str) -> bool:
+        if not incident_id.strip():
+            raise InvalidRecord("Incident ID is required")
         rows = self.load()
         updated = [r for r in rows if r.incident_id != incident_id]
         if len(rows) == len(updated):
@@ -120,12 +122,17 @@ class DataManager:
         """Filter stored records; severity thresholds rank Low=1 through Critical=4."""
         if status_filter and status_filter not in VALID_STATUSES:
             raise InvalidRecord("Invalid incident status filter")
-        if not 1 <= min_severity <= len(VALID_SEVERITIES):
+        if (
+            isinstance(min_severity, bool)
+            or not isinstance(min_severity, int)
+            or not 1 <= min_severity <= len(VALID_SEVERITIES)
+        ):
             raise InvalidRecord("Minimum severity must be between 1 and 4")
 
         all_reports = self.load()
         results = []
         normalized_location_query = location_query.strip().casefold()
+        normalized_category_filter = category_filter.strip().casefold()
         severity_ranks = {
             severity.casefold(): rank
             for rank, severity in enumerate(VALID_SEVERITIES, start=1)
@@ -145,8 +152,8 @@ class DataManager:
                 continue
 
             # Match category (e.g. Electrical, Infrastructure, Plumbing)
-            cat = str(data.get("category", "")).lower()
-            if category_filter and category_filter.lower() != cat:
+            cat = str(data.get("category", "")).strip().casefold()
+            if normalized_category_filter and normalized_category_filter != cat:
                 continue
 
             # Match severity threshold

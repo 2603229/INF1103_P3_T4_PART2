@@ -38,9 +38,14 @@ class HazardReport:
         location = str(fields.get("location") or "").strip()
         asset = str(fields.get("asset_info") or "").strip()
         desc = str(fields.get("description") or "").strip()
+        raw_people = fields.get("impact_headcount")
         try:
-            people = int(fields.get("impact_headcount"))
-        except (ValueError, TypeError) as exc:
+            if isinstance(raw_people, bool):
+                raise ValueError
+            people = int(raw_people)
+            if isinstance(raw_people, float) and not raw_people.is_integer():
+                raise ValueError
+        except (ValueError, TypeError, OverflowError) as exc:
             raise InvalidRecord("Headcount must be a whole number") from exc
         if not re.fullmatch(r"[A-Za-z\s'.-]+", name):
             raise InvalidRecord("Reporter name contains invalid characters")
@@ -105,15 +110,15 @@ class HazardReport:
     # Store the risk score, priority, routing decision, historical count and duplicate result.
     def apply_decision(self, decision: Decision, historical_frequency: int,
                        duplicate_check: str) -> None:
-        self._fields.update(historical_frequency=historical_frequency,
-                            is_duplicate=duplicate_check, priority_score=decision.score,
+        self.set_historical_frequency(historical_frequency)
+        self._fields.update(is_duplicate=duplicate_check, priority_score=decision.score,
                             final_priority=decision.priority, recommended_action=decision.action,
                             escalation_reason=decision.reason, assigned_route=decision.route)
 
     # Store the nonnegative recurrence count used by the risk policy.
     def set_historical_frequency(self, count: int) -> None:
-        if count < 0:
-            raise InvalidRecord("Historical frequency cannot be negative")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise InvalidRecord("Historical frequency must be a nonnegative integer")
         self._fields["historical_frequency"] = count
 
     # Keep a resolved image path for Gemini; it is intentionally never serialized.
@@ -122,6 +127,8 @@ class HazardReport:
 
     # Assign the incident ID and initial status exactly once, with a creation audit event.
     def assign_identity(self, incident_id: str) -> None:
+        if not isinstance(incident_id, str) or not incident_id.strip():
+            raise InvalidRecord("Incident ID is required")
         if self.incident_id:
             raise InvalidRecord("An existing incident ID cannot be reassigned")
         self._fields["incident_id"] = incident_id

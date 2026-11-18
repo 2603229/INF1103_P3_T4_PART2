@@ -82,6 +82,8 @@ class DataManager:
 
     # Remove an identified incident while retaining a pre-change backup where supported.
     def delete(self, incident_id: str) -> bool:
+        if not incident_id.strip():
+            raise InvalidRecord("Incident ID is required")
         rows = self.load()
         updated = [r for r in rows if r.incident_id != incident_id]
         if len(rows) == len(updated):

@@ -218,6 +218,17 @@ class DataRepositoryTests(unittest.TestCase):
         with self.assertRaises(DataStoreError):
             self.data.load()
 
+    def test_delete_with_blank_id_preserves_legacy_records(self) -> None:
+        self.use_backend("json")
+        original = '[{"description": "legacy record"}, {"incident_id": ""}]'
+        self.path.write_text(original, encoding="utf-8")
+
+        with self.assertRaises(InvalidRecord):
+            self.data.delete("  ")
+
+        self.assertEqual(len(self.data.load()), 2)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), original)
+
     def test_tampered_audit_history_is_rejected(self) -> None:
         self.use_backend("json")
         self.data.save(new_report())
